@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Web3 Transaction Simulator</title>
+  <style>
+    body {
+      width: 400px;
+      padding: 20px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1a73e8;
+      margin: 0;
+    }
+    
+    .simulation-result {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 16px;
+      display: none;
+    }
+    
+    .simulation-result.active {
+      display: block;
+    }
+    
+    .result-item {
+      margin-bottom: 8px;
+    }
+    
+    .label {
+      font-weight: 500;
+      color: #5f6368;
+    }
+    
+    .value {
+      color: #202124;
+    }
+    
+    .status {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    .status.success {
+      background: #e6f4ea;
+      color: #137333;
+    }
+    
+    .status.error {
+      background: #fce8e6;
+      color: #c5221f;
+    }
+    
+    .button {
+      background: #1a73e8;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    
+    .button:hover {
+      background: #1557b0;
+    }
+    
+    .button:disabled {
+      background: #dadce0;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 class="title">Transaction Simulator</h1>
+      <span class="status success">Ready</span>
+    </div>
+    
+    <div class="simulation-result">
+      <div class="result-item">
+        <span class="label">Transaction Hash:</span>
+        <span class="value" id="txHash">-</span>
+      </div>
+      <div class="result-item">
+        <span class="label">Gas Estimate:</span>
+        <span class="value" id="gasEstimate">-</span>
+      </div>
+      <div class="result-item">
+        <span class="label">Success Probability:</span>
+        <span class="value" id="probability">-</span>
+      </div>
+      <div class="result-item">
+        <span class="label">Simulation Output:</span>
+        <pre class="value" id="output">No simulation results yet</pre>
+      </div>
+    </div>
+    
+    <button id="simulateBtn" class="button">Simulate Transaction</button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html> 
