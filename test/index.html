@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Web3 Transaction Simulator Test</title>
+</head>
+<body>
+    <h1>Web3 Transaction Simulator Test Page</h1>
+    <button id="sendTransaction">Send Test Transaction</button>
+    
+    <div id="result" style="margin-top: 20px;"></div>
+
+    <script>
+        // Mock ethereum provider
+        window.ethereum = {
+            request: async ({ method, params }) => {
+                if (method === 'eth_sendTransaction') {
+                    console.log('Transaction params:', params);
+                    return '0x123...'; // Mock transaction hash
+                }
+                return null;
+            }
+        };
+
+        // Test transaction
+        const testTransaction = {
+            from: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+            to: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+            value: '0x1',
+            data: '0x',
+        };
+
+        document.getElementById('sendTransaction').addEventListener('click', async () => {
+            try {
+                const result = await window.ethereum.request({
+                    method: 'eth_sendTransaction',
+                    params: [testTransaction]
+                });
+                document.getElementById('result').textContent = `Transaction Hash: ${result}`;
+            } catch (error) {
+                document.getElementById('result').textContent = `Error: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html>
