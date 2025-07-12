@@ -2,6 +2,11 @@
 
 A Chrome extension that intercepts and simulates Web3 transactions before they reach your wallet. This helps you understand the potential outcome and effects of a transaction before actually executing it.
 
+## Sponsoring 
+
+This project is supported by the [ETH Rangers Program](https://blog.ethereum.org/2024/12/02/ethrangers-public-goods) and [Ethereum Foundation Ecosystem Support Program (ESP)](https://esp.ethereum.foundation), under Grant #[FY25-1948, Q1-2025](https://blog.ethereum.org/2025/05/08/allocation-q1-25).
+
+
 ## Features
 
 - Intercepts Web3 transactions before they reach your wallet
@@ -54,3 +59,9 @@ The current implementation uses a mock simulation engine. To connect to your act
 ## Contributing
 
 Feel free to submit issues and enhancement requests! 
+
+
+---
+
+## 📄 License
+This project is licensed under the  License. See the [COPYING](COPYING) file for details.
