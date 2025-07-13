@@ -14,7 +14,7 @@ This project is supported by the [ETH Rangers Program](https://blog.ethereum.org
 - Shows potential effects and security considerations
 - Modern, clean UI for viewing simulation results
 
-## Getting Started (for Developers)
+## Getting Started 
 
 Follow these instructions to set up the extension for development.
 
@@ -27,8 +27,8 @@ Follow these instructions to set up the extension for development.
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/web3_tx_simulation_plugin.git
-    cd web3_tx_simulation_plugin
+    git clone <your-repository-url>
+    cd <repository-directory>
     ```
 
 2.  **Install dependencies:**
