@@ -27,8 +27,8 @@ Follow these instructions to set up the extension for development.
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/web3-transaction-simulator.git
-    cd web3-transaction-simulator
+    git clone https://github.com/your-username/web3_tx_simulation_plugin.git
+    cd web3_tx_simulation_plugin
     ```
 
 2.  **Install dependencies:**
