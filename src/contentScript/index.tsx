@@ -4,26 +4,40 @@
 const injectScript = () => {
   const script = document.createElement('script');
   script.textContent = `
-    // Store the original ethereum.request
-    const originalRequest = window.ethereum?.request;
-    
-    // Override ethereum.request to intercept transactions
-    if (window.ethereum) {
-      window.ethereum.request = async function(args) {
-        // Only intercept eth_sendTransaction calls
-        if (args.method === 'eth_sendTransaction') {
-          // Send message to extension
-          window.postMessage(
-            { type: 'SIMULATE_TRANSACTION', request: args },
-            window.location.origin
-          );
-        }
-        // Call original request
-        return originalRequest.call(window.ethereum, args);
-      };
-    }
+    (function() {
+      if (window.ethereum) {
+        const originalRequest = window.ethereum.request;
+        window.ethereum.request = async function(args) {
+          const { method, params } = args;
+
+          if (method === 'eth_sendTransaction' && params && params.length > 0) {
+            console.log('Intercepted eth_sendTransaction:', params[0]);
+            window.postMessage({
+              type: 'SIMULATE_TRANSACTION',
+              transaction: params[0]
+            }, '*');
+            // Do not proceed with the original request yet.
+            // Wait for the user to approve from the extension popup.
+            return new Promise(() => {}); 
+          }
+
+          if (method === 'wallet_sendCalls' && params && params.length > 0) {
+            console.log('Intercepted wallet_sendCalls:', params[0]);
+            // For now, we'll just simulate the first call in the batch.
+            // A more robust solution could simulate all of them.
+            const transactionToSimulate = params[0].calls[0];
+            window.postMessage({
+              type: 'SIMULATE_TRANSACTION',
+              transaction: transactionToSimulate
+            }, '*');
+            return new Promise(() => {});
+          }
+
+          return originalRequest.apply(this, [args]);
+        };
+      }
+    })();
   `;
-  
   (document.head || document.documentElement).appendChild(script);
   script.remove();
 };

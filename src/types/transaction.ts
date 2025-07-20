@@ -26,6 +26,12 @@ export interface SimulationResult {
   error?: string;
 }
 
+export interface BatchSimulationResult {
+  success: boolean;
+  results: SimulationResult[];
+  error?: string;
+}
+
 export interface EthereumRequest {
   method: string;
   params: any[];
@@ -66,6 +72,37 @@ export function createMockSimulationResult(): SimulationResult {
         }
       ]
     }
+  };
+}
+
+// Helper function to create a mock batched simulation result
+export function createMockBatchSimulationResult(): BatchSimulationResult {
+  return {
+    success: true,
+    results: [
+      createMockSimulationResult(), // First transaction is a Transfer
+      { // Second transaction is an Approval
+        success: true,
+        gasEstimate: '35000',
+        events: {
+          '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': [
+            {
+              name: 'Approval',
+              eventName: 'Approval',
+              contractAddress: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+              blockNumber: 1234568,
+              transactionHash: '0xfedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
+              caller: '0x1234567890123456789012345678901234567890',
+              parameters: [
+                { name: 'owner', type: 'address', value: '0x1234...' },
+                { name: 'spender', type: 'address', value: '0x5678...' },
+                { name: 'value', type: 'uint256', value: '500000000000000000' }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   };
 }
 
