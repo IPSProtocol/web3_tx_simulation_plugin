@@ -58,8 +58,12 @@ const commonConfig = {
         { 
           from: 'public',
           globOptions: {
-            ignore: ['**/index.html', '**/popup.html']
+            ignore: ['**/index.html', '**/popup.html', '**/images/icon*.png']
           }
+        },
+        {
+          from: 'public/images/icon*.png',
+          to: '[name][ext]'
         }
       ]
     })

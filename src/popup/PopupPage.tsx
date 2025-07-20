@@ -1,173 +1,164 @@
-import React, { useEffect, useState } from 'react';
-import { Box, Typography, CircularProgress, Stack } from '@mui/material';
-import { EventTable } from '../components/EventTable';
+import React, { useState, useEffect } from 'react';
+import { Box, Typography, CircularProgress, Paper, Stack, Button } from '@mui/material';
+import { SimulationResult, BatchSimulationResult, createMockBatchSimulationResult } from '../types/transaction';
 import { StorageService } from '../services/storageService';
-import { SimulationResult } from '../types/transaction';
+import { EventTable } from '../components/EventTable';
+import { BatchSimulationResultDisplay } from '../components/BatchSimulationResultDisplay';
 
 const storageService = new StorageService();
 
 const PopupPage: React.FC = () => {
   const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [batchSimulationResult, setBatchSimulationResult] = useState<BatchSimulationResult | null>(null);
+  const [simulationType, setSimulationType] = useState<'single' | 'batch'>('batch'); // Default to 'batch' for mocking
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSimulationRequest = async (request: any) => {
-    setLoading(true);
-    try {
-      setSimulationResult({
-        success: true,
-        gasEstimate: request.gasEstimate || '50000',
-        events: request.events || {},
-      });
-    } catch (error) {
-      setSimulationResult({
-        success: false,
-        gasEstimate: '0',
-        events: {},
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-    setLoading(false);
+  const handleApprove = () => {
+    console.log('POPUP: User approved transaction');
+    // Send approval message to page script
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]?.id) {
+        chrome.tabs.sendMessage(tabs[0].id, { type: 'USER_APPROVED' });
+      }
+    });
+    window.close();
   };
 
-  const handleMessage = async (message: { type: string; request: any }) => {
-    if (message.type === 'SIMULATE_TRANSACTION' && message.request) {
-      await handleSimulationRequest(message.request);
-    }
+  const handleReject = () => {
+    console.log('POPUP: User rejected transaction');
+    // Send rejection message to page script
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]?.id) {
+        chrome.tabs.sendMessage(tabs[0].id, { type: 'USER_REJECTED' });
+      }
+    });
+    window.close();
   };
 
   useEffect(() => {
-    const loadStoredResult = async () => {
-      const storedResult = await storageService.get<SimulationResult>('simulationResult');
-      if (storedResult) {
-        setSimulationResult(storedResult);
+    const loadSimulationResults = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Try to load batch simulation results first
+        const batchResult = await storageService.get<any>('lastBatchSimulation');
+        if (batchResult && batchResult.result) {
+          console.log('POPUP: Loaded batch simulation result:', batchResult);
+          setBatchSimulationResult(batchResult.result);
+          setSimulationType('batch');
+          setIsLoading(false);
+          return;
+        }
+        
+        // Fallback to single simulation results
+        const singleResult = await storageService.get<SimulationResult>('simulationResult');
+        if (singleResult) {
+          console.log(' POPUP: Loaded single simulation result:', singleResult);
+          setSimulationResult(singleResult);
+          setSimulationType('single');
+          setIsLoading(false);
+          return;
+        }
+        
+        // If no real data, show mock data as fallback
+        console.log(' POPUP: No simulation results found, showing mock data');
+        const mockBatchData = createMockBatchSimulationResult();
+        setBatchSimulationResult(mockBatchData);
+        setSimulationType('batch');
+        setIsLoading(false);
+        
+      } catch (error) {
+        console.error(' POPUP: Error loading simulation results:', error);
+        setError('Failed to load simulation results');
+        setIsLoading(false);
       }
     };
 
-    loadStoredResult();
+    loadSimulationResults();
 
-    // Only add the message listener if we're in a Chrome extension environment
-    const isExtension = typeof chrome !== 'undefined' && chrome.runtime !== undefined;
-    if (isExtension) {
-      chrome.runtime.onMessage.addListener(handleMessage);
+    // Listen for real-time updates when new simulations are performed
+    const handleStorageUpdate = () => {
+      console.log(' POPUP: Storage updated, reloading results...');
+      loadSimulationResults();
+    };
+
+    // Listen for storage changes
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.onChanged.addListener(handleStorageUpdate);
       return () => {
-        chrome.runtime.onMessage.removeListener(handleMessage);
+        chrome.storage.onChanged.removeListener(handleStorageUpdate);
       };
-    }
-    
-    // For development environment, simulate a transaction after a delay
-    if (process.env.NODE_ENV === 'development') {
-      const timer = setTimeout(() => {
-        handleSimulationRequest({
-          gasEstimate: '75000',
-          events: {
-            // ERC20 Token Contract
-            '0x1234567890123456789012345678901234567890': [
-              {
-                eventName: 'Transfer',
-                parameters: [
-                  { name: 'from', value: '0x1234...5678', type: 'address' },
-                  { name: 'to', value: '0x8765...4321', type: 'address' },
-                  { name: 'value', value: '1000000000000000000', type: 'uint256' }
-                ],
-                contractAddress: '0x1234567890123456789012345678901234567890',
-                blockNumber: 1234567,
-                transactionHash: '0xabcd...',
-                caller: '0x1234...5678'
-              },
-              {
-                eventName: 'Approval',
-                parameters: [
-                  { name: 'owner', value: '0x1234...5678', type: 'address' },
-                  { name: 'spender', value: '0x9876...5432', type: 'address' },
-                  { name: 'value', value: '2000000000000000000', type: 'uint256' }
-                ],
-                contractAddress: '0x1234567890123456789012345678901234567890',
-                blockNumber: 1234567,
-                transactionHash: '0xabcd...',
-                caller: '0x1234...5678'
-              }
-            ],
-            // DEX Contract
-            '0x9876543210987654321098765432109876543210': [
-              {
-                eventName: 'Swap',
-                parameters: [
-                  { name: 'sender', value: '0x1234...5678', type: 'address' },
-                  { name: 'recipient', value: '0x8765...4321', type: 'address' },
-                  { name: 'amount0In', value: '1000000000000000000', type: 'uint256' },
-                  { name: 'amount1In', value: '0', type: 'uint256' },
-                  { name: 'amount0Out', value: '0', type: 'uint256' },
-                  { name: 'amount1Out', value: '2975632942', type: 'uint256' }
-                ],
-                contractAddress: '0x9876543210987654321098765432109876543210',
-                blockNumber: 1234567,
-                transactionHash: '0xabcd...',
-                caller: '0x1234...5678'
-              }
-            ]
-          }
-        });
-      }, 1000);
-      return () => clearTimeout(timer);
     }
   }, []);
 
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" height="100vh">
-        <CircularProgress />
-      </Box>
-    );
-  }
+  const renderContent = () => {
+    if (isLoading) {
+      return <CircularProgress />;
+    }
 
-  if (!simulationResult) {
-    return (
-      <Box p={2}>
-        <Typography variant="h6" component="h1">
-          No simulation results yet
-        </Typography>
-      </Box>
-    );
-  }
+    if (error) {
+      return <Typography color="error">{error}</Typography>;
+    }
+
+    if (simulationType === 'batch' && batchSimulationResult) {
+      return <BatchSimulationResultDisplay batchResult={batchSimulationResult} />;
+    }
+    
+    if (simulationType === 'single' && simulationResult) {
+      // Assuming you have a component for single results or just want to render the EventTable directly
+      const contractAddress = Object.keys(simulationResult.events)[0];
+      const events = simulationResult.events[contractAddress] || [];
+      return <EventTable contractAddress={contractAddress} events={events} />;
+    }
+
+    return <Typography>No simulation data available.</Typography>;
+  };
 
   return (
-    <Box 
-      sx={{ 
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+    <Box
+      sx={{
+        width: 800,
         minHeight: '100vh',
-        width: '100%',
-        margin: 0,
-        padding: 0
-      }}
-    >
-      <Box sx={{ 
-        width: '60%',
+        p: 4,
         display: 'flex',
         flexDirection: 'column',
-        gap: 4
-      }}>
-        <Stack spacing={2} alignItems="center">
-          <Typography variant="h5" component="h1" align="center">
-            Transaction Simulation Results
-          </Typography>
-          <Typography color="success.main" align="center">
-            Simulation successful
-          </Typography>
-          <Typography align="center">
-            Estimated Gas: {simulationResult.gasEstimate}
-          </Typography>
-        </Stack>
-
-        {simulationResult.success && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {Object.entries(simulationResult.events).map(([contractAddress, events]) => (
-              <EventTable key={contractAddress} contractAddress={contractAddress} events={events} />
-            ))}
-          </Box>
-        )}
-      </Box>
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'grey.100',
+      }}
+    >
+      <Stack spacing={2} sx={{ width: '100%', alignItems: 'center', mb: 4 }}>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Transaction Simulation Results
+        </Typography>
+        <Typography variant="subtitle1" color="text.secondary">
+          Simulation successful
+        </Typography>
+        {/* You can make gas estimate dynamic later */}
+        <Typography variant="body1">Estimated Gas: 75000</Typography> 
+      </Stack>
+      {renderContent()}
+      
+      {/* Action buttons for approving or rejecting the transaction */}
+      <Stack direction="row" spacing={2} sx={{ mt: 4 }}>
+        <Button 
+          variant="contained" 
+          color="error" 
+          onClick={handleReject}
+          size="large"
+        >
+          Reject Transaction
+        </Button>
+        <Button 
+          variant="contained" 
+          color="success" 
+          onClick={handleApprove}
+          size="large"
+        >
+          Approve Transaction
+        </Button>
+      </Stack>
     </Box>
   );
 };

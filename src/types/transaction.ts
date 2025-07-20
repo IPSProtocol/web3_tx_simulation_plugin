@@ -47,6 +47,7 @@ export interface EventEmissionContext {
 
 export interface StorageData {
   simulationResult: SimulationResult | null;
+  lastBatchSimulation: any; // TODO: Type this properly
   lastRequest: any; // TODO: Type this properly once we know the exact shape
 }
 
@@ -151,4 +152,22 @@ export const groupEventsByContract = (events: EventContext[]): ContractEvents =>
     acc[event.contractAddress].push(event);
     return acc;
   }, {});
-}; 
+};
+
+export interface WalletCall {
+  to?: `0x${string}`;
+  data?: `0x${string}`;
+  value?: `0x${string}`;
+}
+
+export interface WalletSendCallsParams {
+  version: string;
+  chainId: `0x${string}`;
+  from: `0x${string}`;
+  calls: {
+    to?: `0x${string}`;
+    data?: `0x${string}`;
+    value?: `0x${string}`;
+  }[];
+  capabilities?: Record<string, any>;
+}

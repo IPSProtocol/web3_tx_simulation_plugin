@@ -8,3 +8,5 @@ node_modules/
 package-lock.json
 yarn.lock
 TODO
+public/.DS_Store
+.DS_Store

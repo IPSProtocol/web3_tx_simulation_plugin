@@ -1,9 +1,4 @@
-import { SimulationResult } from '../types/transaction';
-
-interface StorageData {
-  simulationResult: SimulationResult | null;
-  lastRequest: any;
-}
+import { SimulationResult, StorageData } from '../types/transaction';
 
 export class StorageService {
   private readonly isExtension: boolean;
