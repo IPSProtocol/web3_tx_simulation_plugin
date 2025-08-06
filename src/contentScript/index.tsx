@@ -25,6 +25,7 @@ script.onload = () => {
 (document.head || document.documentElement).appendChild(script);
 
 // 2. Listen for messages from the page script
+// LOGIC ENTRYPOINT
 window.addEventListener('message', (event) => {
   // Only log our own messages to avoid spam
   if (event.data.type && (event.data.type.includes('WEB3_') || event.data.type.includes('SIMULATION'))) {

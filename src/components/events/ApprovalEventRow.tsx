@@ -13,7 +13,7 @@ import {
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt';
-import { EventContext } from '../../types/transaction';
+import { EventContext } from '../../types/simulation_interfaces';
 import { ParameterList } from './ParameterList';
 import ethIcon from '../../assets/images/eth-icon.png';
 import btcIcon from '../../assets/images/btc-icon.png';
@@ -37,11 +37,7 @@ const getTokenIcon = (tokenName?: string) => {
   return ethIcon; // Default to ETH icon
 };
 
-interface EventParameter {
-  name: string;
-  value: string;
-  type: string;
-}
+
 
 interface ApprovalEventRowProps {
   event: EventContext;

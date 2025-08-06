@@ -1,125 +1,148 @@
-import { BigNumberish } from 'ethers';
-import { SimulationResult, EventContext, EthereumRequest, ContractEvents } from '../types/transaction';
-
-interface SimulationRequest {
-  to: string;
-  from: string;
-  data: string;
-  value: string;
-}
-
-interface ApiResponse {
-  events: Array<{
-    eventName: string;
-    caller: string;
-    contractAddress: string;
-    parameters: Array<{
-      name: string;
-      value: string;
-      type: string;
-    }>;
-    blockNumber: number;
-    transactionHash: string;
-  }>;
-  gasEstimate: string;
-}
-
-interface SimulationResponse {
-  success: boolean;
-  gasEstimate: string;
-  events: EventContext[];
-  error?: string;
-}
-
-export const simulateTransaction = async (ethereumRequest: EthereumRequest): Promise<SimulationResult> => {
-  // This is a mock implementation. In a real application, this would call your simulation backend.
-  const mockResponse: SimulationResult = {
-    success: true,
-    gasEstimate: '100000',
-    events: {
-      '0x1234567890123456789012345678901234567890': [
-        {
-          name: 'Transfer',
-          eventName: 'Transfer',
-          contractAddress: '0x1234567890123456789012345678901234567890',
-          blockNumber: 1234567,
-          transactionHash: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
-          caller: '0x1234567890123456789012345678901234567890',
-          parameters: [
-            { name: 'from', type: 'address', value: '0x1234...5678' },
-            { name: 'to', type: 'address', value: '0x8765...4321' },
-            { name: 'value', type: 'uint256', value: '1000000000000000000' }
-          ]
-        }
-      ]
-    }
-  };
-
-  return mockResponse;
-};
-
-export const handleSimulationRequest = async (request: EthereumRequest): Promise<SimulationResult> => {
-  if (request.method !== 'eth_sendTransaction') {
-    throw new Error('Invalid request method');
-  }
-
-  try {
-    const response = await simulateTransaction(request);
-    return response;
-  } catch (error) {
-    return {
-      success: false,
-      gasEstimate: '0',
-      events: {},
-      error: error instanceof Error ? error.message : 'Unknown error occurred'
-    };
-  }
-};
+import { SimulationApiClient } from './simulationClient';
+import { EventAnalyzer } from './simulationParser';
+import {
+    TransactionArgs,
+    SimulateV1IPSPParams,
+    BlockOverrides,
+    StateOverride,
+    BatchSimulationResult,
+    ParsedSimulationResult,
+    SimBlockResult
+} from '../types/simulation_interfaces';
 
 export class SimulationService {
-  private readonly API_BASE_URL = 'http://localhost:3000/api';
+    private apiClient: SimulationApiClient;
+    private eventAnalyzer: EventAnalyzer;
 
-  async simulateTransaction(request: SimulationRequest): Promise<SimulationResult> {
-    try {
-      const response = await fetch(`${this.API_BASE_URL}/simulate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json() as { message?: string };
-        throw new Error(errorData.message || 'Simulation failed');
-      }
-
-      const simulationResult = await response.json();
-      return {
-        success: true,
-        events: {},
-        gasEstimate: simulationResult.gasEstimate || '0',
-      };
-    } catch (error) {
-      console.error('Simulation error:', error);
-      return {
-        success: false,
-        events: {},
-        gasEstimate: '0',
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
-      };
+    constructor(rpcUrl: string) {
+        this.apiClient = new SimulationApiClient(rpcUrl);
+        this.eventAnalyzer = new EventAnalyzer();
     }
-  }
 
-  static extractTransactionData(ethereumRequest: EthereumRequest): SimulationRequest {
-    const txData = ethereumRequest.params[0];
-    return {
-      from: txData.from,
-      to: txData.to,
-      data: txData.data,
-      value: txData.value || '0',
-    };
-  }
+    async simulateTransaction(transaction: TransactionArgs): Promise<BatchSimulationResult> {
+        const params: SimulateV1IPSPParams = this.apiClient.createSimulationParams([transaction]);
+
+        console.log('Simulating params:', params);
+
+        try {
+            const response = await this.apiClient.simulateV1IPSP(params);
+            console.log('SimulateV1IPSP response:', response);
+            // Fix: Check if error exists and is not empty
+            if (!response.success || (response.error && response.error.trim().length > 0)) {
+                return {
+                    success: false,
+                    error: response.error || 'Unknown error',
+                    results: []
+                };
+            }
+
+            if (response.results) {
+                const parsedResults = this.eventAnalyzer.parseTransactionEvents(response.results);
+                const gasEstimate = this.calculateGasEstimate(parsedResults);
+
+                return {
+                    success: true,
+                    results: parsedResults,
+                    gasEstimate
+                };
+            }
+
+            return {
+                success: false,
+                error: 'No results returned',
+                results: []
+            };
+        } catch (error) {
+            console.log('SimulateV1IPSP error:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown simulation error',
+                results: []
+            };
+        }
+    }
+
+    async simulateMultipleTransactions(
+        transactions: TransactionArgs[],
+        blockOverrides?: BlockOverrides,
+        stateOverrides?: StateOverride
+    ): Promise<BatchSimulationResult> {
+        const params: SimulateV1IPSPParams = this.apiClient.createSimulationParams(
+            transactions,
+            {
+                blockOverrides,
+                stateOverrides,
+                traceTransfers: true,
+                validation: true,
+                returnFullTransactions: true
+            }
+        );
+
+        try {
+            const response = await this.apiClient.simulateV1IPSP(params);
+
+            // Fix: Check if error exists and is not empty
+            if (!response.success || (response.error && response.error.trim().length > 0)) {
+                return {
+                    success: false,
+                    error: response.error || 'Unknown error',
+                    results: []
+                };
+            }
+
+            const parsedResults = this.eventAnalyzer.parseTransactionEvents(response.results);
+            const gasEstimate = this.calculateGasEstimate(parsedResults);
+
+            return {
+                success: true,
+                results: parsedResults,
+                gasEstimate
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown simulation error',
+                results: []
+            };
+        }
+    }
+
+    /**
+     * Simulate batch transactions using wallet_sendCalls format
+     */
+    async simulateBatchTransactionCalls(calls: any[]): Promise<BatchSimulationResult> {
+        // Convert wallet_sendCalls format to TransactionArgs format
+        const transactions: TransactionArgs[] = calls.map((call, index) => {
+            const tx: TransactionArgs = {
+                to: call.to,
+                data: call.data,
+                value: call.value,
+                gas: call.gas,
+                gasPrice: call.gasPrice,
+                maxFeePerGas: call.maxFeePerGas,
+                maxPriorityFeePerGas: call.maxPriorityFeePerGas,
+            };
+
+            console.log(`Call #${index + 1}`, {
+                originalCall: call,
+                transformedTransaction: tx
+            });
+
+            return tx;
+        });
+
+        return this.simulateMultipleTransactions(transactions);
+    }
+
+    private calculateGasEstimate(results: ParsedSimulationResult[]): number {
+        let totalGas = 0;
+
+        for (const blockResult of results) {
+            for (const transaction of blockResult.transactions) {
+                totalGas += parseInt(transaction.gasUsed, 16);
+            }
+        }
+
+        return totalGas;
+    }
 }
-
-export const simulationService = new SimulationService();

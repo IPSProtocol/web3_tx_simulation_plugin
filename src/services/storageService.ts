@@ -1,4 +1,4 @@
-import { SimulationResult, StorageData } from '../types/transaction';
+import { BatchSimulationResult, StorageData, TransactionArgs } from '../types/simulation_interfaces';
 
 export class StorageService {
   private readonly isExtension: boolean;
@@ -7,7 +7,7 @@ export class StorageService {
     this.isExtension = typeof chrome !== 'undefined' && chrome.storage !== undefined;
   }
 
-  async get<T>(key: keyof StorageData): Promise<T | null> {
+  async get<T>(key: string): Promise<T | null> {
     if (this.isExtension) {
       return new Promise((resolve) => {
         chrome.storage.local.get([key], (result) => {
@@ -19,7 +19,7 @@ export class StorageService {
     return value ? JSON.parse(value) : null;
   }
 
-  async set<T>(key: keyof StorageData, value: T): Promise<void> {
+  async set<T>(key: string, value: T): Promise<void> {
     if (this.isExtension) {
       return new Promise((resolve) => {
         chrome.storage.local.set({ [key]: value }, () => {
@@ -41,7 +41,7 @@ export class StorageService {
     localStorage.clear();
   }
 
-  async remove(key: keyof StorageData): Promise<void> {
+  async remove(key: string): Promise<void> {
     if (this.isExtension) {
       return new Promise((resolve) => {
         chrome.storage.local.remove(key, () => {

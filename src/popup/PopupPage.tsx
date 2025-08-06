@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, CircularProgress, Paper, Stack, Button } from '@mui/material';
-import { SimulationResult, BatchSimulationResult, createMockBatchSimulationResult } from '../types/transaction';
+import { Box, Typography, CircularProgress, Paper, Stack, Button, Alert } from '@mui/material';
+import { BatchSimulationResult, TransactionArgs } from '../types/simulation_interfaces';
 import { StorageService } from '../services/storageService';
-import { EventTable } from '../components/EventTable';
+import { SimulationService } from '../services/simulationService';
 import { BatchSimulationResultDisplay } from '../components/BatchSimulationResultDisplay';
 
 const storageService = new StorageService();
+// TODO: Make RPC URL configurable
+const simulationService = new SimulationService('https://172.172.168.218:8545');
 
 const PopupPage: React.FC = () => {
-  const [simulationResult, setSimulationResult] = useState<SimulationResult | null>(null);
   const [batchSimulationResult, setBatchSimulationResult] = useState<BatchSimulationResult | null>(null);
-  const [simulationType, setSimulationType] = useState<'single' | 'batch'>('batch'); // Default to 'batch' for mocking
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,50 +37,55 @@ const PopupPage: React.FC = () => {
   };
 
   useEffect(() => {
-    const loadSimulationResults = async () => {
+    const loadAndSimulateTransactions = async () => {
       try {
         setIsLoading(true);
+        setError(null);
         
-        // Try to load batch simulation results first
-        const batchResult = await storageService.get<any>('lastBatchSimulation');
-        if (batchResult && batchResult.result) {
-          console.log('POPUP: Loaded batch simulation result:', batchResult);
-          setBatchSimulationResult(batchResult.result);
-          setSimulationType('batch');
-          setIsLoading(false);
-          return;
+        // Try to load pending transactions from storage
+        const pendingTransactions = await storageService.get<TransactionArgs[]>('pendingTransactions');
+        
+        if (pendingTransactions && pendingTransactions.length > 0) {
+          console.log('POPUP: Found pending transactions, simulating...', pendingTransactions);
+          
+          let result: BatchSimulationResult;
+          
+          if (pendingTransactions.length === 1) {
+            result = await simulationService.simulateTransaction(pendingTransactions[0]);
+          } else {
+            result = await simulationService.simulateMultipleTransactions(pendingTransactions);
+          }
+          
+          setBatchSimulationResult(result);
+          
+          // Save the simulation result for future reference
+          await storageService.set('lastBatchSimulation', { result });
+        } else {
+          // Try to load existing simulation results
+          const existingResult = await storageService.get<any>('lastBatchSimulation');
+          if (existingResult && existingResult.result) {
+            console.log('POPUP: Loaded existing simulation result:', existingResult);
+            setBatchSimulationResult(existingResult.result);
+          } else {
+            setError('No pending transactions found for simulation.');
+          }
         }
         
-        // Fallback to single simulation results
-        const singleResult = await storageService.get<SimulationResult>('simulationResult');
-        if (singleResult) {
-          console.log(' POPUP: Loaded single simulation result:', singleResult);
-          setSimulationResult(singleResult);
-          setSimulationType('single');
-          setIsLoading(false);
-          return;
-        }
-        
-        // If no real data, show mock data as fallback
-        console.log(' POPUP: No simulation results found, showing mock data');
-        const mockBatchData = createMockBatchSimulationResult();
-        setBatchSimulationResult(mockBatchData);
-        setSimulationType('batch');
         setIsLoading(false);
         
       } catch (error) {
-        console.error(' POPUP: Error loading simulation results:', error);
-        setError('Failed to load simulation results');
+        console.error('POPUP: Error loading/simulating transactions:', error);
+        setError('Failed to load or simulate transactions');
         setIsLoading(false);
       }
     };
 
-    loadSimulationResults();
+    loadAndSimulateTransactions();
 
     // Listen for real-time updates when new simulations are performed
     const handleStorageUpdate = () => {
-      console.log(' POPUP: Storage updated, reloading results...');
-      loadSimulationResults();
+      console.log('POPUP: Storage updated, reloading results...');
+      loadAndSimulateTransactions();
     };
 
     // Listen for storage changes
@@ -94,25 +99,32 @@ const PopupPage: React.FC = () => {
 
   const renderContent = () => {
     if (isLoading) {
-      return <CircularProgress />;
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <CircularProgress />
+          <Typography>Simulating transactions...</Typography>
+        </Box>
+      );
     }
 
     if (error) {
-      return <Typography color="error">{error}</Typography>;
+      return (
+        <Alert severity="error">
+          <Typography variant="h6">Error</Typography>
+          <Typography>{error}</Typography>
+        </Alert>
+      );
     }
 
-    if (simulationType === 'batch' && batchSimulationResult) {
+    if (batchSimulationResult) {
       return <BatchSimulationResultDisplay batchResult={batchSimulationResult} />;
     }
-    
-    if (simulationType === 'single' && simulationResult) {
-      // Assuming you have a component for single results or just want to render the EventTable directly
-      const contractAddress = Object.keys(simulationResult.events)[0];
-      const events = simulationResult.events[contractAddress] || [];
-      return <EventTable contractAddress={contractAddress} events={events} />;
-    }
 
-    return <Typography>No simulation data available.</Typography>;
+    return (
+      <Alert severity="warning">
+        <Typography>No simulation data available.</Typography>
+      </Alert>
+    );
   };
 
   return (
@@ -132,12 +144,18 @@ const PopupPage: React.FC = () => {
         <Typography variant="h4" component="h1" gutterBottom>
           Transaction Simulation Results
         </Typography>
-        <Typography variant="subtitle1" color="text.secondary">
-          Simulation successful
-        </Typography>
-        {/* You can make gas estimate dynamic later */}
-        <Typography variant="body1">Estimated Gas: 75000</Typography> 
+        {batchSimulationResult?.success && (
+          <Typography variant="subtitle1" color="success.main">
+            Simulation successful
+          </Typography>
+        )}
+        {batchSimulationResult?.gasEstimate && (
+          <Typography variant="body1">
+            Estimated Gas: {batchSimulationResult.gasEstimate.toLocaleString()}
+          </Typography>
+        )}
       </Stack>
+      
       {renderContent()}
       
       {/* Action buttons for approving or rejecting the transaction */}

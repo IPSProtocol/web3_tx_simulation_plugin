@@ -17,7 +17,7 @@ import {
 } from '@mui/material';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import { EventContext } from '../types/transaction';
+import { EventContext } from '../types/simulation_interfaces';
 import TransferEventRow from './events/TransferEventRow';
 import { ApprovalEventRow } from './events/ApprovalEventRow';
 import SwapEventRow from './events/SwapEventRow';

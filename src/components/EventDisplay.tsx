@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Typography, Chip } from '@mui/material';
-import { EventContext, EventParameter, ContractEvents } from '../types/transaction';
+import { EventContext, ContractEvents } from '../types/simulation_interfaces';
+import { EventParameter } from 'types/simulation_interfaces';
 import { shortenAddress } from '../utils/address';
 
 interface EventDisplayProps {

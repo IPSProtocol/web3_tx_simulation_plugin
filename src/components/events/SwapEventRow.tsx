@@ -15,13 +15,14 @@ import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt';
-import { EventContext } from '../../types/transaction';
+import { EventContext } from '../../types/simulation_interfaces';
 import { ParameterList } from './ParameterList';
 import ethIcon from '../../assets/images/eth-icon.png';
 import btcIcon from '../../assets/images/btc-icon.png';
 import { shortenAddress } from '../../utils/address';
 import { formatUnits } from 'ethers';
 
+import { EventParameter } from 'types/simulation_interfaces';
 // Helper to format token amounts (assuming 18 decimals)
 const formatTokenAmount = (amount: string) => {
   const value = BigInt(amount);
@@ -39,11 +40,7 @@ const getTokenIcon = (tokenName?: string) => {
   return ethIcon; // Default to ETH icon
 };
 
-interface EventParameter {
-  name: string;
-  value: string;
-  type: string;
-}
+
 
 interface SwapEventRowProps {
   event: EventContext;

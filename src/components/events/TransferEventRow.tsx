@@ -13,7 +13,7 @@ import {
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt';
-import { EventContext as EventContextType } from '../../types/transaction';
+import { EventContext as EventContextType } from '../../types/simulation_interfaces';
 import { ParameterList } from './ParameterList';
 import ethIcon from '../../assets/images/eth-icon.png';
 import btcIcon from '../../assets/images/btc-icon.png';
@@ -37,11 +37,7 @@ const getTokenIcon = (tokenName?: string) => {
   return ethIcon; // Default to ETH icon
 };
 
-interface EventParameter {
-  name: string;
-  value: string;
-  type: string;
-}
+import { EventParameter } from 'types/simulation_interfaces';
 
 interface EventContext {
   eventName: string;
@@ -67,7 +63,7 @@ const formatAmount = (amount: string): string => {
 const TransferEventRow: React.FC<TransferEventRowProps> = ({ event, tokenName }) => {
   const [open, setOpen] = React.useState(false);
 
-  const from = event.parameters.find(p => p.name === 'from')?.value;
+  const from = event.parameters.find(p  => p.name === 'from')?.value;
   const to = event.parameters.find(p => p.name === 'to')?.value;
   const value = event.parameters.find(p => p.name === 'value')?.value;
 
