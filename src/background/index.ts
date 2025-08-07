@@ -1,7 +1,6 @@
 import {
   EthereumRequest,
   WalletSendCallsParams,
-  BatchSimulationResult,
   TransactionArgs,
   SetCodeAuthorization
 } from '../types/simulation_interfaces';
@@ -203,73 +202,73 @@ async function handleWalletSendCalls(batch: WalletSendCallsParams): Promise<any>
  * Step 3: Bundle EIP-7702 Authorization + UserOperations into Type 4 Transaction
  * Creates a complete Type 4 transaction ready for execution
  */
-async function createEIP7702Transaction(
-  batch: WalletSendCallsParams
-): Promise<TransactionArgs> {
-  try {
-    bgLog('Creating complete EIP-7702 Type 4 transaction for wallet_sendCalls');
-    bgLog('Batch details:', { from: batch.from, chainId: batch.chainId, callsCount: batch.calls.length });
+// async function createEIP7702Transaction(
+//   batch: WalletSendCallsParams
+// ): Promise<TransactionArgs> {
+//   try {
+//     bgLog('Creating complete EIP-7702 Type 4 transaction for wallet_sendCalls');
+//     bgLog('Batch details:', { from: batch.from, chainId: batch.chainId, callsCount: batch.calls.length });
 
-    // Step 1: Build EIP-7702 Authorization
-    const { authorizationList, transactionNonce } = await buildEIP7702Authorization(
-      batch.chainId,
-      batch.from,
-      METAMASK_DELEGATE_CONTRACT
-    );
+//     // Step 1: Build EIP-7702 Authorization
+//     const { authorizationList, transactionNonce } = await buildEIP7702Authorization(
+//       batch.chainId,
+//       batch.from,
+//       METAMASK_DELEGATE_CONTRACT
+//     );
 
-    // Step 2: Encode UserOperations for delegate contract
-    const executeCalldata = encodeUserOperationsForDelegate(batch.calls);
+//     // Step 2: Encode UserOperations for delegate contract
+//     const executeCalldata = encodeUserOperationsForDelegate(batch.calls);
 
-    // Validate the encoded calldata
-    if (!validateEncodedCalldata(executeCalldata, batch.calls.length)) {
-      throw new Error('Invalid encoded calldata generated');
-    }
+//     // Validate the encoded calldata
+//     if (!validateEncodedCalldata(executeCalldata, batch.calls.length)) {
+//       throw new Error('Invalid encoded calldata generated');
+//     }
 
-    // Step 3: Get gas info and calculate total value
-    const gasInfo = await getCurrentGasInfo();
-    const totalValue = calculateTotalValueFromCalls(batch.calls);
+//     // Step 3: Get gas info and calculate total value
+//     const gasInfo = await getCurrentGasInfo();
+//     const totalValue = calculateTotalValueFromCalls(batch.calls);
 
-    // Step 4: Build the complete Type 4 transaction
-    const eip7702Transaction: TransactionArgs = {
-      type: 4, // ethers v6 supports type: 4 directly
-      chainId: batch.chainId,
-      nonce: transactionNonce,
-      from: batch.from,
-      to: batch.from, // Self-delegation
-      data: executeCalldata,
-      value: totalValue,
-      gasLimit: '0x493E0', // Use gasLimit instead of gas
-      maxFeePerGas: gasInfo.maxFeePerGas,
-      maxPriorityFeePerGas: gasInfo.maxPriorityFeePerGas,
-      authorizationList: authorizationList
-    };
+//     // Step 4: Build the complete Type 4 transaction
+//     const eip7702Transaction: TransactionArgs = {
+//       type: 4, // ethers v6 supports type: 4 directly
+//       chainId: batch.chainId,
+//       nonce: transactionNonce,
+//       from: batch.from,
+//       to: batch.from, // Self-delegation
+//       data: executeCalldata,
+//       value: totalValue,
+//       gasLimit: '0x493E0', // Use gasLimit instead of gas
+//       maxFeePerGas: gasInfo.maxFeePerGas,
+//       maxPriorityFeePerGas: gasInfo.maxPriorityFeePerGas,
+//       authorizationList: authorizationList
+//     };
 
-    bgLog('Type 4 transaction structure created:');
-    bgLog('- From/To:', eip7702Transaction.from);
-    bgLog('- Data length:', eip7702Transaction.data?.length);
-    bgLog('- Authorization list length:', authorizationList.length);
-    bgLog('- Total value:', totalValue);
+//     bgLog('Type 4 transaction structure created:');
+//     bgLog('- From/To:', eip7702Transaction.from);
+//     bgLog('- Data length:', eip7702Transaction.data?.length);
+//     bgLog('- Authorization list length:', authorizationList.length);
+//     bgLog('- Total value:', totalValue);
 
-    // Step 5: Estimate gas for the Type 4 transaction
-    try {
-      const estimatedGas = await estimateEIP7702Gas(eip7702Transaction);
-      eip7702Transaction.gasLimit = estimatedGas;
-      bgLog('✅ Gas estimated for Type 4 transaction:', estimatedGas);
-    } catch (gasError) {
-      bgError('Gas estimation failed for Type 4 transaction:', gasError);
-      // Use higher fallback for EIP-7702 transactions
-      eip7702Transaction.gasLimit = '0x7A120'; // 500,000 gas
-      bgLog('Using fallback gas limit:', eip7702Transaction.gasLimit);
-    }
+//     // Step 5: Estimate gas for the Type 4 transaction
+//     try {
+//       const estimatedGas = await estimateEIP7702Gas(eip7702Transaction);
+//       eip7702Transaction.gasLimit = estimatedGas;
+//       bgLog('✅ Gas estimated for Type 4 transaction:', estimatedGas);
+//     } catch (gasError) {
+//       bgError('Gas estimation failed for Type 4 transaction:', gasError);
+//       // Use higher fallback for EIP-7702 transactions
+//       eip7702Transaction.gasLimit = '0x7A120'; // 500,000 gas
+//       bgLog('Using fallback gas limit:', eip7702Transaction.gasLimit);
+//     }
 
-    bgLog('✅ Complete EIP-7702 Type 4 transaction ready:', eip7702Transaction);
-    return eip7702Transaction;
+//     bgLog('✅ Complete EIP-7702 Type 4 transaction ready:', eip7702Transaction);
+//     return eip7702Transaction;
 
-  } catch (error) {
-    bgError('Failed to create EIP-7702 Type 4 transaction:', error);
-    throw error;
-  }
-}
+//   } catch (error) {
+//     bgError('Failed to create EIP-7702 Type 4 transaction:', error);
+//     throw error;
+//   }
+// }
 
 /**
  * Calculate total value from wallet_sendCalls
@@ -372,19 +371,19 @@ function calculateEIP7702GasEstimate(transaction: TransactionArgs): string {
  * Updated main delegate transaction function
  * Now uses the complete EIP-7702 implementation
  */
-async function createDelegateTransaction(
-  batch: WalletSendCallsParams, 
-  packedOps: Array<{to: string, data: string, value: string, gasLimit: string}>
-): Promise<TransactionArgs> {
-  bgLog('Creating delegate transaction using EIP-7702 Type 4');
+// async function createDelegateTransaction(
+//   batch: WalletSendCallsParams, 
+//   packedOps: Array<{to: string, data: string, value: string, gasLimit: string}>
+// ): Promise<TransactionArgs> {
+//   bgLog('Creating delegate transaction using EIP-7702 Type 4');
   
-  // Remove the try-catch fallback that was masking signature failures
-  // Use the complete EIP-7702 implementation - this MUST succeed
-  const eip7702Transaction = await createEIP7702Transaction(batch);
+//   // Remove the try-catch fallback that was masking signature failures
+//   // Use the complete EIP-7702 implementation - this MUST succeed
+//   const eip7702Transaction = await createEIP7702Transaction(batch);
   
-  bgLog('✅ EIP-7702 delegate transaction created successfully');
-  return eip7702Transaction;
-}
+//   bgLog('✅ EIP-7702 delegate transaction created successfully');
+//   return eip7702Transaction;
+// }
 
 /**
  * Fallback transaction if EIP-7702 fails
@@ -601,7 +600,7 @@ async function buildEIP7702Authorization(
       body: JSON.stringify({
         jsonrpc: '2.0',
         method: 'eth_getTransactionCount',
-        params: [userAddress, 'latest'],
+        params: [userAddress, 'pending'],
         id: 1
       })
     });
@@ -751,24 +750,59 @@ function encodeUserOperationsForDelegate(
   calls: WalletSendCallsParams['calls']
 ): string {
   try {
-    bgLog('Encoding UserOperations for delegate contract:', calls);
-
+    bgLog('🔧 CORRECT: Using execute(bytes32 mode, bytes executionCalldata)');
+    
+    // ✅ CORRECT signature: execute(bytes32, bytes)
     const iface = new ethers.Interface([
-      "function execute((address to,uint256 value,bytes data)[] calls)"
+      "function execute(bytes32 mode, bytes executionCalldata)"
     ]);
 
-    const formatted = calls.map(call => ({
-      to: call.to,
-      value: call.value || "0",
-      data: call.data || "0x"
-    }));
+    // ✅ CORRECT mode: 0x01 in MSB for batch
+    const batchMode = "0x0100000000000000000000000000000000000000000000000000000000000000";
+    
+    // ✅ Build Execution[] array - 3-tuple (target, value, callData)
+    const executions = calls.map((call, index) => {
+      const execution = {
+        target: call.to || '0x0000000000000000000000000000000000000000',
+        value: call.value ? BigInt(call.value) : BigInt(0),
+        callData: call.data || '0x'
+      };
+      
+      bgLog(`🔧 Execution ${index}:`, {
+        target: execution.target,
+        value: execution.value.toString(),
+        callDataLength: execution.callData.length
+      });
+      
+      return execution;
+    });
 
-    const calldata = iface.encodeFunctionData("execute", [formatted]);
-    bgLog('Encoded execute calldata:', calldata);
+    // ✅ ABI encode the Execution[] array into bytes
+    const executionCalldata = ethers.AbiCoder.defaultAbiCoder().encode(
+      ['tuple(address target, uint256 value, bytes callData)[]'],
+      [executions]
+    );
+    
+    bgLog('🔧 Encoded execution calldata length:', executionCalldata.length);
+    bgLog('🔧 Execution calldata preview:', executionCalldata.slice(0, 100) + '...');
+
+    // ✅ Final encoding: execute(mode, executionCalldata)  
+    const calldata = iface.encodeFunctionData("execute", [batchMode, executionCalldata]);
+    const selector = calldata.slice(0, 10);
+    
+    bgLog('🔧 FINAL - Function selector:', selector);
+    bgLog('🔧 FINAL - Expected: 0xe9ae5c53');
+    bgLog('🔧 FINAL - Matches?', selector === '0xe9ae5c53');
+    
+    if (selector !== '0xe9ae5c53') {
+      throw new Error(`Wrong selector: ${selector}, expected: 0xe9ae5c53`);
+    }
+    
+    bgLog('✅ SUCCESS: Correct execute(bytes32, bytes) encoding');
     return calldata;
 
   } catch (error) {
-    bgError('Failed to encode UserOperations:', error);
+    bgError('❌ Failed to encode execution calldata:', error);
     throw error;
   }
 }
@@ -849,7 +883,7 @@ async function getSignatureForBatch(batch: WalletSendCallsParams): Promise<{
     body: JSON.stringify({
       jsonrpc: '2.0',
       method: 'eth_getTransactionCount',
-      params: [batch.from, 'latest'],
+      params: [batch.from, 'pending'],
       id: 1
     })
   });
@@ -860,22 +894,23 @@ async function getSignatureForBatch(batch: WalletSendCallsParams): Promise<{
   const authNonce = txNonceNum + 1;
   
   // 2. Build message for signature
+  bgLog('🔄 Step 2: Building RLP message...');
   const chainIdNum = parseInt(batch.chainId, 16);
-  bgLog('🔄 ChainId details:', {
-    original: batch.chainId,
-    parsed: chainIdNum,
-    hexBack: chainIdNum.toString(16)
-  });
+  bgLog('🔄 Step 2.1: ChainId parsed:', chainIdNum);
 
-  // Fix the RLP encoding - use proper ethers formatting
   const rlpEncoded = ethers.encodeRlp([
-    batch.chainId,                    // Use original chainId string directly
-    METAMASK_DELEGATE_CONTRACT,       // Address is already proper format
-    ethers.toBeHex(authNonce)        // Use ethers.toBeHex for consistent formatting
+    ethers.toBeHex(chainIdNum),          // ✅ Properly formatted hex
+    METAMASK_DELEGATE_CONTRACT, 
+    ethers.toBeHex(authNonce)           // ✅ Properly formatted hex
   ]);
+  bgLog('🔄 Step 2.2: RLP encoded:', rlpEncoded);
 
-  bgLog('🔄 RLP encoded successfully:', rlpEncoded);
   const messageBytes = '0x05' + rlpEncoded.slice(2);
+  bgLog('🔄 Step 2.3: Final message to sign:', messageBytes);
+
+  // Add the hash calculation here too
+  const messageHash = ethers.keccak256(messageBytes);
+  bgLog('🔄 Step 2.4: Message hash (what gets signed):', messageHash);
   
   bgLog('🔄 BLOCKING: About to request signature - SIMULATION STOPS HERE');
   bgLog('🔄 Message to sign:', messageBytes);
@@ -922,32 +957,68 @@ async function getSignatureForBatch(batch: WalletSendCallsParams): Promise<{
   };
 }
 
-// Add this function before handleWalletSendCalls:
+// Enhanced buildTransactionWithSignature with detailed nonce debugging:
 async function buildTransactionWithSignature(
   batch: WalletSendCallsParams, 
   signatureData: { signature: string; authNonce: number; transactionNonce: string }
 ): Promise<TransactionArgs> {
   
-  // Get FRESH nonce right before building transaction
-  bgLog('🔄 Getting fresh nonce for transaction...');
-  const nonceResponse = await fetch(GETH_NODE_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'eth_getTransactionCount',
-      params: [batch.from, 'latest'], // Use 'pending' to get latest nonce
-      id: 1
-    })
-  });
+  bgLog('🔍 NONCE DEBUG - Starting transaction build...');
+  bgLog('🔍 NONCE DEBUG - Original signature data nonce:', signatureData.transactionNonce);
+  
+  // Get multiple nonce readings to ensure accuracy
+  const nonceReads = [];
+  
+  for (let i = 0; i < 3; i++) {
+    bgLog(`🔍 NONCE DEBUG - Reading nonce attempt ${i + 1}/3...`);
+    
+    const nonceResponse = await fetch(GETH_NODE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'eth_getTransactionCount',
+        params: [batch.from, 'latest'], 
+        id: Date.now() + i // Unique ID for each request
+      })
+    });
 
-  const nonceData = await nonceResponse.json();
-  if (nonceData.error) {
-    throw new Error(`Failed to get fresh nonce: ${nonceData.error.message}`);
+    const nonceData = await nonceResponse.json();
+    if (nonceData.error) {
+      bgError(`❌ Nonce read ${i + 1} failed:`, nonceData.error);
+      continue;
+    }
+
+    const nonce = nonceData.result;
+    const nonceNum = parseInt(nonce, 16);
+    nonceReads.push(nonceNum);
+    
+    bgLog(`🔍 NONCE DEBUG - Read ${i + 1}:`, nonce, `(decimal: ${nonceNum})`);
+    
+    // Small delay between reads
+    if (i < 2) await new Promise(resolve => setTimeout(resolve, 100));
   }
-
-  const freshTransactionNonce = nonceData.result;
-  bgLog('✅ Fresh nonce obtained:', freshTransactionNonce, '(was:', signatureData.transactionNonce, ')');
+  
+  if (nonceReads.length === 0) {
+    throw new Error('Failed to get any valid nonce reading');
+  }
+  
+  // Use the highest nonce to be absolutely safe
+  const maxNonce = Math.max(...nonceReads);
+  const finalTransactionNonce = `0x${maxNonce.toString(16)}`;
+  
+  bgLog('🔍 NONCE DEBUG - All readings:', nonceReads);
+  bgLog('🔍 NONCE DEBUG - Using highest nonce:', finalTransactionNonce, `(decimal: ${maxNonce})`);
+  
+  // Compare with original nonce
+  const originalNonceNum = parseInt(signatureData.transactionNonce, 16);
+  bgLog('🔍 NONCE DEBUG - Original nonce was:', originalNonceNum);
+  bgLog('🔍 NONCE DEBUG - Nonce difference:', maxNonce - originalNonceNum);
+  
+  if (maxNonce - originalNonceNum > 5) {
+    bgError('⚠️  NONCE WARNING: Large nonce difference detected!');
+    bgError('⚠️  This might indicate network congestion or pending transactions');
+  }
   
   // Parse signature
   const r = signatureData.signature.slice(0, 66);
@@ -966,7 +1037,7 @@ async function buildTransactionWithSignature(
     s: s
   };
   
-  bgLog('✅ Authorization tuple built:', authorizationTuple);
+  bgLog('✅ Authorization tuple built with auth nonce:', signatureData.authNonce);
   
   // Encode UserOperations and build transaction
   const executeCalldata = encodeUserOperationsForDelegate(batch.calls);
@@ -976,19 +1047,100 @@ async function buildTransactionWithSignature(
   const transaction: TransactionArgs = {
     type: 4,
     chainId: batch.chainId,
-    nonce: freshTransactionNonce, // Use FRESH nonce here
+    nonce: finalTransactionNonce, // Use the highest/safest nonce
     from: batch.from,
     to: batch.from,
     data: executeCalldata,
     value: totalValue,
-    gasLimit: '0x2FAF080', // 50M gas as shown in error
+    gasLimit: '0x2FAF080', // 50M gas
     maxFeePerGas: gasInfo.maxFeePerGas,
     maxPriorityFeePerGas: gasInfo.maxPriorityFeePerGas,
     authorizationList: [authorizationTuple]
   };
 
-  bgLog('✅ Transaction built with fresh nonce:', freshTransactionNonce);
+  bgLog('✅ Transaction built with final nonce:', finalTransactionNonce);
+  bgLog('🔍 NONCE DEBUG - Transaction summary:');
+  bgLog('🔍 NONCE DEBUG - - Transaction nonce:', finalTransactionNonce, `(${maxNonce})`);
+  bgLog('🔍 NONCE DEBUG - - Auth nonce:', `0x${signatureData.authNonce.toString(16)}`, `(${signatureData.authNonce})`);
+  
+  // Validate the signature before building transaction
+  const isSignatureValid = await validateEIP7702Signature(
+    batch.chainId,
+    batch.from,
+    METAMASK_DELEGATE_CONTRACT,
+    signatureData.authNonce,
+    signatureData.signature
+  );
+  
+  if (!isSignatureValid) {
+    throw new Error('EIP-7702 signature validation failed');
+  }
+  
+  bgLog('✅ Signature validated successfully');
   return transaction;
+}
+
+// Add signature validation function:
+async function validateEIP7702Signature(
+  chainId: string,
+  userAddress: string,
+  delegateAddress: string,
+  authNonce: number,
+  signature: string
+): Promise<boolean> {
+  try {
+    bgLog('🔍 Validating EIP-7702 signature...');
+    
+    // Recreate EXACT same message as signed
+    const chainIdNum = parseInt(chainId, 16); // Parse the hex string
+    const rlpEncoded = ethers.encodeRlp([
+      ethers.toBeHex(chainIdNum),          // ✅ Same format as signing
+      delegateAddress,
+      ethers.toBeHex(authNonce)           // ✅ Same format as signing
+    ]);
+    const messageBytes = '0x05' + rlpEncoded.slice(2);
+    
+    bgLog('🔍 Original message:', messageBytes);
+    
+    // MetaMask signs the PREFIXED version, so verify against that
+    try {
+      // Use ethers.verifyMessage which handles the Ethereum prefix correctly
+      const recoveredAddress = ethers.verifyMessage(
+        ethers.getBytes(messageBytes),  // Convert to bytes array
+        signature
+      );
+      
+      bgLog('🔍 Recovered address:', recoveredAddress);
+      bgLog('🔍 Expected address:', userAddress);
+      
+      const isValid = recoveredAddress.toLowerCase() === userAddress.toLowerCase();
+      bgLog(isValid ? '✅ Signature locally valid' : '❌ Signature locally invalid');
+      
+      return isValid;
+      
+    } catch (error) {
+      bgError('❌ Local signature verification failed:', error);
+      
+      // Alternative approach - verify the raw hash if ethers.verifyMessage fails
+      try {
+        const messageHash = ethers.hashMessage(ethers.getBytes(messageBytes));
+        const recoveredAddress = ethers.recoverAddress(messageHash, signature);
+        
+        bgLog('🔍 Alternative recovered address:', recoveredAddress);
+        const isValid = recoveredAddress.toLowerCase() === userAddress.toLowerCase();
+        bgLog(isValid ? '✅ Alternative signature valid' : '❌ Alternative signature invalid');
+        
+        return isValid;
+      } catch (altError) {
+        bgError('❌ Alternative verification failed:', altError);
+        return false;
+      }
+    }
+    
+  } catch (error) {
+    bgError('❌ Signature validation failed:', error);
+    return false;
+  }
 }
 
 // Background script entry point
