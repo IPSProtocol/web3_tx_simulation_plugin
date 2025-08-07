@@ -1,9 +1,10 @@
 // ===== INPUT INTERFACES =====
 
 export interface TransactionArgs {
+  type?: number;
   from?: string;
   to?: string;
-  gas?: string;
+  gasLimit?: string;
   gasPrice?: string;
   maxFeePerGas?: string;
   maxPriorityFeePerGas?: string;
@@ -27,7 +28,7 @@ export interface SetCodeAuthorization {
   chainId: string;
   address: string;
   nonce: string;
-  v: string;
+  yParity: string;  // Changed from 'v' to 'yParity'
   r: string;
   s: string;
 }

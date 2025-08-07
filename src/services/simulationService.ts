@@ -117,7 +117,7 @@ export class SimulationService {
                 to: call.to,
                 data: call.data,
                 value: call.value,
-                gas: call.gas,
+                gasLimit: call.gas,
                 gasPrice: call.gasPrice,
                 maxFeePerGas: call.maxFeePerGas,
                 maxPriorityFeePerGas: call.maxPriorityFeePerGas,

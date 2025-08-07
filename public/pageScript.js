@@ -97,6 +97,33 @@ setTimeout(() => {
   
   console.log('SIMULATION PLUGIN: Injection complete! Provider wrapped.');
   
+  // Listen for personal_sign requests from content script
+  window.addEventListener('message', async (event) => {
+    if (event.data.type === 'REQUEST_PERSONAL_SIGN') {
+      try {
+        console.log('SIMULATION PLUGIN: PageScript handling personal_sign:', event.data);
+        
+        const signature = await currentProvider.request({
+          method: 'personal_sign',
+          params: [event.data.message, event.data.address]
+        });
+        
+        // Send response back to content script
+        window.postMessage({
+          type: 'PERSONAL_SIGN_RESPONSE',
+          signature: signature
+        }, window.location.origin);
+        
+      } catch (error) {
+        console.error('SIMULATION PLUGIN: personal_sign failed:', error);
+        window.postMessage({
+          type: 'PERSONAL_SIGN_RESPONSE', 
+          error: error.message || 'Unknown error'
+        }, window.location.origin);
+      }
+    }
+  });
+  
 }, 1000); // Wait 1 second for other extensions to load
 
 console.log('SIMULATION PLUGIN: Script loaded, waiting for delayed injection...'); 

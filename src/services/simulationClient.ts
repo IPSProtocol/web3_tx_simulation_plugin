@@ -72,13 +72,13 @@ export class SimulationApiClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('json data:', data);
+      console.log('json data json string:', data);
       if (data.error) {
         return {
           results: [],

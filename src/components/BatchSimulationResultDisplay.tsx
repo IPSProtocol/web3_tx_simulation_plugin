@@ -31,15 +31,59 @@ export const BatchSimulationResultDisplay: React.FC<BatchSimulationResultDisplay
     );
   }
 
+  // Enhanced event formatter
+  const formatEvent = (event: ParsedEvent): { title: string; details: { label: string; value: string }[] } => {
+    const eventFormatters: Record<string, (event: ParsedEvent) => { title: string; details: { label: string; value: string }[] }> = {
+      // Transfer(address,address,uint256)
+      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef": (event) => {
+        const from = event.parametersDecoded?.[0]?.decodedValue || event.parameters[0] || 'Unknown';
+        const to = event.parametersDecoded?.[1]?.decodedValue || event.parameters[1] || 'Unknown';
+        const amount = event.parametersDecoded?.[2]?.decodedValue || event.parameters[2] || 'Unknown';
+        
+        return {
+          title: "Transfer",
+          details: [
+            { label: "From", value: from },
+            { label: "To", value: to },
+            { label: "Amount", value: amount }
+          ]
+        };
+      },
+      
+      // Approval(address,address,uint256)
+      "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925": (event) => {
+        const owner = event.parametersDecoded?.[0]?.decodedValue || event.parameters[0] || 'Unknown';
+        const spender = event.parametersDecoded?.[1]?.decodedValue || event.parameters[1] || 'Unknown';
+        const amount = event.parametersDecoded?.[2]?.decodedValue || event.parameters[2] || 'Unknown';
+        
+        return {
+          title: "Approval",
+          details: [
+            { label: "Owner", value: owner },
+            { label: "Spender", value: spender },
+            { label: "Amount", value: amount }
+          ]
+        };
+      }
+    };
+
+    const formatter = eventFormatters[event.eventSignature];
+    if (formatter) {
+      return formatter(event);
+    }
+
+    // Default formatting for unknown events
+    return {
+      title: event.decodedEventName || `Unknown Event (${event.eventSignature.slice(0, 10)}...)`,
+      details: event.parametersDecoded?.map((param, index) => ({
+        label: `Param ${index}`,
+        value: param.decodedValue || param.value
+      })) || []
+    };
+  };
+
   return (
     <Box sx={{ width: '100%' }}>
-      {/* Gas Estimate Display */}
-      {batchResult.gasEstimate && (
-        <Paper elevation={1} sx={{ p: 2, mb: 3, backgroundColor: 'primary.light', color: 'primary.contrastText' }}>
-          <Typography variant="h6">Estimated Gas: {batchResult.gasEstimate.toLocaleString()}</Typography>
-        </Paper>
-      )}
-
       {/* Render each block result */}
       {batchResult.results.map((blockResult: ParsedSimulationResult, blockIndex: number) => (
         <Paper 
@@ -52,21 +96,15 @@ export const BatchSimulationResultDisplay: React.FC<BatchSimulationResultDisplay
             border: '1px solid rgba(0, 0, 0, 0.12)'
           }}
         >
-          {/* Block Header */}
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="h5" gutterBottom component="div" sx={{ fontWeight: 'medium' }}>
-              Block {parseInt(blockResult.blockNumber, 16)}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Hash: {shortenAddress(blockResult.blockHash)}
-            </Typography>
-          </Box>
-          <Divider sx={{ my: 2 }} />
-          
           {/* Render each transaction in the block */}
-          {blockResult.transactions.map((transaction: ParsedTransactionResult, txIndex: number) => (
+          {blockResult.transactions.map((transaction: ParsedTransactionResult, txIndex: number) => {
+            // Debug logging for events
+            console.log('DISPLAY: Transaction events:', transaction.events);
+            console.log('DISPLAY: Events by contract:', transaction.eventsByContract);
+            
+            return (
             <Box key={txIndex} sx={{ mb: 3 }}>
-              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
                 <Typography variant="h6" component="div">
                   Transaction {transaction.transactionIndex + 1}
                 </Typography>
@@ -87,10 +125,10 @@ export const BatchSimulationResultDisplay: React.FC<BatchSimulationResultDisplay
                   <Typography variant="body2">{transaction.error.message}</Typography>
                 </Alert>
               )}
-
-              {/* Events Display */}
+              
+              {/* Events Display - Each event in its own row */}
               {transaction.events.length === 0 ? (
-                <Typography color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                <Typography color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center', py: 3 }}>
                   No events emitted in this transaction.
                 </Typography>
               ) : (
@@ -99,70 +137,66 @@ export const BatchSimulationResultDisplay: React.FC<BatchSimulationResultDisplay
                     Events ({transaction.events.length})
                   </Typography>
                   
-                  {/* Group events by contract */}
-                  {Array.from(transaction.eventsByContract.entries()).map(([contractAddress, events]) => (
-                    <Paper 
-                      key={contractAddress} 
-                      variant="outlined" 
-                      sx={{ p: 2, mb: 2, backgroundColor: 'grey.50' }}
-                    >
-                      <Box sx={{ mb: 2 }}>
-                        <Typography variant="overline" color="text.secondary">
-                          Contract
-                        </Typography>
-                        <Chip 
-                          label={shortenAddress(contractAddress)} 
-                          size="small" 
-                          sx={{ ml: 1, mb: 1 }} 
-                        />
-                        <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                          ({events.length} events)
-                        </Typography>
-                      </Box>
-
-                      {/* Render individual events */}
-                      <Stack spacing={1}>
-                        {events.map((event: ParsedEvent, eventIndex: number) => (
-                          <Paper 
-                            key={eventIndex} 
-                            elevation={0} 
-                            sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}
-                          >
-                            <Typography variant="subtitle2" sx={{ fontWeight: 'medium', mb: 1 }}>
-                              {event.decodedEventName || event.eventSignature}
-                            </Typography>
-                            
-                            {/* Event Parameters */}
-                            {event.parametersDecoded && event.parametersDecoded.length > 0 ? (
-                              <Box sx={{ ml: 2 }}>
-                                <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                                  Parameters:
-                                </Typography>
-                                {event.parametersDecoded.map((param, paramIndex) => (
-                                  <Box key={paramIndex} sx={{ mb: 1 }}>
-                                    <Typography variant="body2" component="span" sx={{ fontWeight: 'medium' }}>
-                                      [{param.index}]
-                                    </Typography>
-                                    <Typography variant="body2" component="span" sx={{ ml: 1, fontFamily: 'monospace' }}>
-                                      {param.value}
-                                    </Typography>
-                                  </Box>
-                                ))}
-                              </Box>
-                            ) : (
-                              <Typography variant="body2" color="text.secondary" sx={{ ml: 2, fontStyle: 'italic' }}>
-                                No parameters
+                  {/* Display each event in its own row */}
+                  <Stack spacing={2}>
+                    {transaction.events.map((event: ParsedEvent, eventIndex: number) => {
+                      const formattedEvent = formatEvent(event);
+                      return (
+                        <Paper 
+                          key={eventIndex} 
+                          elevation={1} 
+                          sx={{ 
+                            p: 3, 
+                            border: '1px solid', 
+                            borderColor: 'divider',
+                            backgroundColor: 'background.paper'
+                          }}
+                        >
+                          <Stack direction="row" spacing={2} alignItems="flex-start">
+                            {/* Event Title */}
+                            <Box sx={{ minWidth: 120 }}>
+                              <Typography variant="h6" sx={{ fontWeight: 'medium', color: 'primary.main' }}>
+                                {formattedEvent.title}
                               </Typography>
-                            )}
-                          </Paper>
-                        ))}
-                      </Stack>
-                    </Paper>
-                  ))}
+                              <Chip 
+                                label={shortenAddress(event.contractAddress)} 
+                                size="small" 
+                                variant="outlined"
+                                sx={{ mt: 1 }}
+                              />
+                            </Box>
+                            
+                            {/* Event Details */}
+                            <Box sx={{ flex: 1 }}>
+                              {formattedEvent.details.length > 0 ? (
+                                <Stack spacing={1}>
+                                  {formattedEvent.details.map((detail, detailIndex) => (
+                                    <Box key={detailIndex} sx={{ display: 'flex', alignItems: 'center' }}>
+                                      <Typography variant="body2" sx={{ fontWeight: 'medium', minWidth: 80, color: 'text.secondary' }}>
+                                        {detail.label}:
+                                      </Typography>
+                                      <Typography variant="body2" sx={{ fontFamily: 'monospace', ml: 1, wordBreak: 'break-all' }}>
+                                        {detail.value}
+                                      </Typography>
+                                    </Box>
+                                  ))}
+                                </Stack>
+                              ) : (
+                                <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                                  No parameters
+                                </Typography>
+                              )}
+                            </Box>
+                          </Stack>
+                        </Paper>
+                      );
+                    })}
+                  </Stack>
                 </Box>
               )}
             </Box>
-          ))}
+            );
+          })}
         </Paper>
       ))}
     </Box>

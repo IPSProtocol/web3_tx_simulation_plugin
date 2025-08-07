@@ -1,13 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, CircularProgress, Paper, Stack, Button, Alert } from '@mui/material';
-import { BatchSimulationResult, TransactionArgs } from '../types/simulation_interfaces';
+import { BatchSimulationResult } from '../types/simulation_interfaces';
 import { StorageService } from '../services/storageService';
-import { SimulationService } from '../services/simulationService';
 import { BatchSimulationResultDisplay } from '../components/BatchSimulationResultDisplay';
 
 const storageService = new StorageService();
-// TODO: Make RPC URL configurable
-const simulationService = new SimulationService('https://172.172.168.218:8545');
 
 const PopupPage: React.FC = () => {
   const [batchSimulationResult, setBatchSimulationResult] = useState<BatchSimulationResult | null>(null);
@@ -37,55 +34,65 @@ const PopupPage: React.FC = () => {
   };
 
   useEffect(() => {
-    const loadAndSimulateTransactions = async () => {
+    const loadSimulationResults = async () => {
       try {
         setIsLoading(true);
         setError(null);
         
-        // Try to load pending transactions from storage
-        const pendingTransactions = await storageService.get<TransactionArgs[]>('pendingTransactions');
+        console.log('POPUP: Loading simulation results from storage...');
         
-        if (pendingTransactions && pendingTransactions.length > 0) {
-          console.log('POPUP: Found pending transactions, simulating...', pendingTransactions);
-          
-          let result: BatchSimulationResult;
-          
-          if (pendingTransactions.length === 1) {
-            result = await simulationService.simulateTransaction(pendingTransactions[0]);
-          } else {
-            result = await simulationService.simulateMultipleTransactions(pendingTransactions);
+        // Load simulation results that were already computed by the background script
+        const [lastSimulation, lastBatchSimulation] = await Promise.all([
+          storageService.get<any>('lastSimulation'),
+          storageService.get<any>('lastBatchSimulation')
+        ]);
+        
+        console.log('POPUP: Storage check - lastSimulation:', lastSimulation);
+        console.log('POPUP: Storage check - lastBatchSimulation:', lastBatchSimulation);
+        
+        // Use the most recent simulation result
+        let mostRecentResult = null;
+        let mostRecentTimestamp = 0;
+        
+        if (lastBatchSimulation && lastBatchSimulation.result && lastBatchSimulation.timestamp) {
+          if (lastBatchSimulation.timestamp > mostRecentTimestamp) {
+            mostRecentResult = lastBatchSimulation.result;
+            mostRecentTimestamp = lastBatchSimulation.timestamp;
+            console.log('POPUP: Using batch simulation result (timestamp:', lastBatchSimulation.timestamp, ')');
           }
-          
-          setBatchSimulationResult(result);
-          
-          // Save the simulation result for future reference
-          await storageService.set('lastBatchSimulation', { result });
+        }
+        
+        if (lastSimulation && lastSimulation.result && lastSimulation.timestamp) {
+          if (lastSimulation.timestamp > mostRecentTimestamp) {
+            mostRecentResult = lastSimulation.result;
+            mostRecentTimestamp = lastSimulation.timestamp;
+            console.log('POPUP: Using single simulation result (timestamp:', lastSimulation.timestamp, ')');
+          }
+        }
+        
+        if (mostRecentResult) {
+          setBatchSimulationResult(mostRecentResult);
+          console.log('POPUP: Successfully loaded simulation result:', mostRecentResult);
         } else {
-          // Try to load existing simulation results
-          const existingResult = await storageService.get<any>('lastBatchSimulation');
-          if (existingResult && existingResult.result) {
-            console.log('POPUP: Loaded existing simulation result:', existingResult);
-            setBatchSimulationResult(existingResult.result);
-          } else {
-            setError('No pending transactions found for simulation.');
-          }
+          setError('No simulation results found. Please perform a transaction first.');
+          console.log('POPUP: No simulation results available in storage');
         }
         
         setIsLoading(false);
         
       } catch (error) {
-        console.error('POPUP: Error loading/simulating transactions:', error);
-        setError('Failed to load or simulate transactions');
+        console.error('POPUP: Error loading simulation results:', error);
+        setError(`Failed to load simulation results: ${error instanceof Error ? error.message : 'Unknown error'}`);
         setIsLoading(false);
       }
     };
 
-    loadAndSimulateTransactions();
+    loadSimulationResults();
 
     // Listen for real-time updates when new simulations are performed
     const handleStorageUpdate = () => {
       console.log('POPUP: Storage updated, reloading results...');
-      loadAndSimulateTransactions();
+      loadSimulationResults();
     };
 
     // Listen for storage changes
@@ -102,7 +109,7 @@ const PopupPage: React.FC = () => {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
           <CircularProgress />
-          <Typography>Simulating transactions...</Typography>
+          <Typography>Loading simulation results...</Typography>
         </Box>
       );
     }

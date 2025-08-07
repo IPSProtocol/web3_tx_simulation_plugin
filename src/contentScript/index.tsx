@@ -49,6 +49,11 @@ window.addEventListener('message', (event) => {
       type: 'SIMULATE_TRANSACTION',
       transaction: event.data.transaction
     }, response => {
+      if (chrome.runtime.lastError) {
+        console.error('SIMULATION PLUGIN: Extension context invalidated, reloading page...');
+        window.location.reload();
+        return;
+      }
       // 4. Send the simulation result back to the page script
       console.log('SIMULATION PLUGIN: ContentScript forwarding simulation result:', response);
       window.postMessage({
@@ -63,14 +68,17 @@ window.addEventListener('message', (event) => {
   if (event.data.type === 'WEB3_BATCH_TX_INTERCEPTED') {
     console.log('SIMULATION PLUGIN: ContentScript handling batch transaction:', event.data.batch);
 
-    // Open the popup to show simulation results
-    chrome.runtime.sendMessage({ type: 'OPEN_POPUP' });
-
-    // 3. Forward the batch to the background script for simulation
+    // Forward the batch to the background script for simulation
     chrome.runtime.sendMessage({
       type: 'SIMULATE_BATCH_TRANSACTION',
       batch: event.data.batch
     }, response => {
+      if (chrome.runtime.lastError) {
+        console.error('SIMULATION PLUGIN: Extension context invalidated, reloading page...');
+        window.location.reload();
+        return;
+      }
+      
       // 4. Send the simulation result back to the page script
       console.log('SIMULATION PLUGIN: ContentScript forwarding batch simulation result:', response);
       window.postMessage({
@@ -78,19 +86,116 @@ window.addEventListener('message', (event) => {
         result: response,
         payload: event.data.batch 
       }, window.location.origin);
+      
+      // ONLY NOW open the popup after simulation is complete
+      if (response && (response.success || response.error)) {
+        chrome.runtime.sendMessage({ type: 'OPEN_POPUP' });
+      }
     });
   }
 });
 
 console.log('SIMULATION PLUGIN: ContentScript setup complete, listening for messages...');
 
-// Listen for messages from popup (approve/reject)
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'USER_APPROVED') {
-    console.log('SIMULATION PLUGIN: User approved transaction');
-    window.postMessage({ type: 'USER_APPROVED' }, '*');
-  } else if (message.type === 'USER_REJECTED') {
-    console.log('SIMULATION PLUGIN: User rejected transaction');
-    window.postMessage({ type: 'USER_REJECTED' }, '*');
+// Single centralized message listener for content script
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  console.log('📨 ContentScript Router received:', msg.type, msg);
+  
+  if (msg.type === 'REQUEST_PERSONAL_SIGN') {
+    console.log('🔄 ContentScript: Received REQUEST_PERSONAL_SIGN');
+    
+    (async () => {
+      try {
+        const signature = await obtainSignatureFromPageScript(msg);
+        console.log('✅ ContentScript: Sending signature back to background');
+        sendResponse({ signature });
+      } catch (err) {
+        console.error('❌ ContentScript: Error getting signature:', err);
+        sendResponse({ error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    })();
+    
+    return true; // Critical: keeps channel open
   }
-}); 
+  
+  if (msg.type === 'USER_APPROVED') {
+    handleUserApproval(msg);
+    sendResponse({ success: true });
+    return false; // Sync response
+  }
+  
+  if (msg.type === 'USER_REJECTED') {
+    handleUserRejection(msg);
+    sendResponse({ success: true });
+    return false; // Sync response
+  }
+  
+  // Unknown message
+  console.error('ContentScript: Unknown message type:', msg.type);
+  sendResponse({ success: false, error: 'Unknown message type' });
+  return false;
+});
+
+// Dedicated async handler for personal sign
+function handlePersonalSignRequest(message: any, sendResponse: (response: any) => void) {
+  console.log('🔄 ContentScript: Starting handlePersonalSignRequest');
+  
+  (async () => {
+    try {
+      console.log('🔄 ContentScript: About to call obtainSignatureFromPageScript');
+      const signature = await obtainSignatureFromPageScript(message);
+      console.log('✅ ContentScript: Personal sign completed:', signature);
+      sendResponse({ signature });
+    } catch (error) {
+      console.error('❌ ContentScript: Personal sign failed:', error);
+      sendResponse({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  })();
+}
+
+// Sync handlers
+function handleUserApproval(message: any) {
+  console.log('SIMULATION PLUGIN: User approved transaction');
+  window.postMessage({ type: 'USER_APPROVED' }, '*');
+}
+
+function handleUserRejection(message: any) {
+  console.log('SIMULATION PLUGIN: User rejected transaction');
+  window.postMessage({ type: 'USER_REJECTED' }, '*');
+}
+
+// Helper function to get signature from page script
+async function obtainSignatureFromPageScript(request: any): Promise<string> {
+  return new Promise((resolve, reject) => {
+    // Forward to page script
+    window.postMessage({
+      type: 'REQUEST_PERSONAL_SIGN',
+      message: request.message,
+      address: request.address
+    }, window.location.origin);
+    
+    // Listen for response
+    const handleSignResponse = (event: MessageEvent) => {
+      if (event.data.type === 'PERSONAL_SIGN_RESPONSE') {
+        window.removeEventListener('message', handleSignResponse);
+        clearTimeout(timeoutId);
+        
+        if (event.data.error) {
+          reject(new Error(event.data.error));
+        } else if (event.data.signature) {
+          resolve(event.data.signature);
+        } else {
+          reject(new Error('No signature received'));
+        }
+      }
+    };
+    
+    window.addEventListener('message', handleSignResponse);
+    
+    // 2 minute timeout
+    const timeoutId = setTimeout(() => {
+      window.removeEventListener('message', handleSignResponse);
+      reject(new Error('Signature request timed out'));
+    }, 120000);
+  });
+} 

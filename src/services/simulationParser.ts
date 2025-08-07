@@ -1,23 +1,57 @@
 import { SimBlockResult, SimCallResult, ContractEvents,   CallError } from '../types/simulation_interfaces';
 
+// Event signatures to filter out (gas-related and validator events)
+const FILTERED_EVENT_SIGNATURES = new Set([
+  '0xed620e74005ef5b6859a850d3371a1c2363c06aea619dd9d62dbd50e77175344', // ETH Transfer for gas payment to validator
+  '0xbcf852bd5973413005fcca294c13b8104b16f51c288a60710ca8ec990d5076f4', // ETH decrease (gas-related)
+  '0x0d17a004887fb911f81bd40baddcdba0a0df2c6270be1da65b89239f89ab8f89'  // Gas-related event
+]);
+
 export class EventAnalyzer {
+  
+  constructor() {
+    console.log('EventAnalyzer initialized with filtered signatures:', Array.from(FILTERED_EVENT_SIGNATURES));
+  }
+  
+  /**
+   * Check if an event signature should be filtered out
+   */
+  private shouldFilterEvent(eventSignature: string): boolean {
+    const shouldFilter = FILTERED_EVENT_SIGNATURES.has(eventSignature);
+    console.log(`Checking filter for ${eventSignature}: ${shouldFilter ? 'FILTER' : 'KEEP'}`);
+    if (shouldFilter) {
+      console.log('Matched filtered signature:', eventSignature);
+    }
+    return shouldFilter;
+  }
   
   /**
    * Parses and analyzes FullTransactionEvents from simulation results
    */
-  parseTransactionEvents(results: SimBlockResult[]): ParsedSimulationResult[] {
+  parseTransactionEvents(results: any[]): ParsedSimulationResult[] {
     const parsedResults: ParsedSimulationResult[] = [];
 
     for (const blockResult of results) {
+      console.log('Processing block result:', blockResult);
+      
+      // Handle the actual response structure
+      const calls = blockResult.Calls || blockResult.calls || [];
+      const receipts = blockResult.Receipts || blockResult.receipts || [];
+      
       const blockEvents: ParsedBlockResult = {
-        blockNumber: blockResult.number,
-        blockHash: blockResult.hash,
+        blockNumber: blockResult.Block?.number || blockResult.number || '0x0',
+        blockHash: blockResult.Block?.hash || blockResult.hash || '0x0',
         transactions: [],
       };
 
-      for (let i = 0; i < blockResult.calls.length; i++) {
-        const call = blockResult.calls[i];
-        const transactionEvents = this.parseTransactionCall(call, i);
+      console.log('Found calls:', calls.length, 'receipts:', receipts.length);
+
+      for (let i = 0; i < calls.length; i++) {
+        const call = calls[i];
+        const receipt = receipts[i];
+        
+        // Combine call data with receipt data for more complete transaction info
+        const transactionEvents = this.parseTransactionCall(call, receipt, i);
         blockEvents.transactions.push(transactionEvents);
       }
 
@@ -27,32 +61,126 @@ export class EventAnalyzer {
     return parsedResults;
   }
 
-  private parseTransactionCall(call: SimCallResult, txIndex: number): ParsedTransactionResult {
+  private parseTransactionCall(call: any, receipt: any, txIndex: number): ParsedTransactionResult {
+    console.log('Parsing call:', call);
+    console.log('Parsing receipt:', receipt);
+    
     const result: ParsedTransactionResult = {
       transactionIndex: txIndex,
-      gasUsed: call.gasUsed,
-      status: call.status,
-      success: call.status === "0x1",
-      error: call.error,
+      gasUsed: receipt?.gasUsed || call?.gasUsed || '0x0',
+      status: receipt?.status || call?.status || '0x1',
+      success: (receipt?.status || call?.status || '0x1') === "0x1",
+      error: call?.error,
       events: [],
       eventsByContract: new Map(),
     };
 
-    // Parse FullTransactionEvents
-    if (call.fullTransactionEvents?.eventsByContract) {
-      for (const contractEvents of call.fullTransactionEvents.eventsByContract) {
-        const parsedEvent = this.parseContractEvent(contractEvents);
-        result.events.push(parsedEvent);
-        
-        // Group by contract
-        if (!result.eventsByContract.has(contractEvents.address)) {
-          result.eventsByContract.set(contractEvents.address, []);
+    // Use Set to track processed events and avoid duplicates
+    const processedEvents = new Set<string>();
+
+    // Primary source: fullTransactionEvents from call (more structured)
+    if (call?.fullTransactionEvents?.eventsByContract) {
+      console.log('Processing fullTransactionEvents from call');
+      console.log('Total events found:', call.fullTransactionEvents.eventsByContract.length);
+      
+      for (let i = 0; i < call.fullTransactionEvents.eventsByContract.length; i++) {
+        const contractEvents = call.fullTransactionEvents.eventsByContract[i];
+        try {
+          const eventSignature = contractEvents.contractEvents.eventSigHash;
+          const address = contractEvents.address;
+          
+          console.log(`Event ${i}: address=${address}, signature=${eventSignature}`);
+          
+          // Skip filtered events
+          if (this.shouldFilterEvent(eventSignature)) {
+            console.log(`✗ FILTERED OUT Event ${i}: ${eventSignature} from ${address}`);
+            continue;
+          }
+
+          console.log(`✓ KEEPING Event ${i}: ${eventSignature} from ${address}`);
+
+          // Create unique key to avoid duplicates
+          const eventKey = `${contractEvents.address}-${eventSignature}-${JSON.stringify(contractEvents.contractEvents.parameters)}`;
+          
+          if (!processedEvents.has(eventKey)) {
+            const parsedEvent = this.parseContractEvent(contractEvents);
+            result.events.push(parsedEvent);
+            
+            // Group by contract
+            if (!result.eventsByContract.has(contractEvents.address)) {
+              result.eventsByContract.set(contractEvents.address, []);
+            }
+            result.eventsByContract.get(contractEvents.address)!.push(parsedEvent);
+            
+            processedEvents.add(eventKey);
+            console.log(`✓ ADDED Event ${i} to results. Total events now: ${result.events.length}`);
+          } else {
+            console.log(`✗ DUPLICATE Event ${i}: already processed`);
+          }
+        } catch (error) {
+          console.warn('Failed to parse contract event:', error, contractEvents);
         }
-        result.eventsByContract.get(contractEvents.address)!.push(parsedEvent);
       }
     }
 
+    // Fallback: Parse logs from receipt only if no fullTransactionEvents
+    else if (receipt?.logs && Array.isArray(receipt.logs)) {
+      console.log('Processing', receipt.logs.length, 'logs from receipt (fallback)');
+      for (const log of receipt.logs) {
+        try {
+          const eventSignature = log.topics && log.topics.length > 0 ? log.topics[0] : '';
+          
+          // Skip filtered events
+          if (this.shouldFilterEvent(eventSignature)) {
+            console.log('Filtering out event:', eventSignature);
+            continue;
+          }
+
+          const parsedEvent = this.parseLogEntry(log);
+          result.events.push(parsedEvent);
+          
+          // Group by contract
+          if (!result.eventsByContract.has(log.address)) {
+            result.eventsByContract.set(log.address, []);
+          }
+          result.eventsByContract.get(log.address)!.push(parsedEvent);
+        } catch (error) {
+          console.warn('Failed to parse log entry:', error, log);
+        }
+      }
+    }
+
+    console.log('=== FINAL PARSING RESULT ===');
+    console.log('Total events after filtering:', result.events.length);
+    result.events.forEach((event, index) => {
+      console.log(`Final Event ${index}: ${event.decodedEventName || 'Unknown'} - ${event.eventSignature} from ${event.contractAddress}`);
+    });
+    console.log('Events by contract:', result.eventsByContract);
+    console.log('=== END PARSING RESULT ===');
+    
     return result;
+  }
+
+  private parseLogEntry(log: any): ParsedEvent {
+    // Extract the event signature from the first topic (if available)
+    const eventSignature = log.topics && log.topics.length > 0 ? log.topics[0] : '';
+    
+    // For log entries, parameters are typically in topics[1:] and data
+    const parameters: string[] = [];
+    if (log.topics && log.topics.length > 1) {
+      parameters.push(...log.topics.slice(1));
+    }
+    if (log.data && log.data !== '0x') {
+      parameters.push(log.data);
+    }
+    
+    return {
+      contractAddress: log.address || '',
+      eventSignature: eventSignature,
+      parameters: parameters,
+      decodedEventName: this.tryDecodeEventName(eventSignature),
+      parametersDecoded: this.tryDecodeParameters(eventSignature, parameters),
+    };
   }
 
   private parseContractEvent(contractEvents: ContractEvents): ParsedEvent {
@@ -81,13 +209,43 @@ export class EventAnalyzer {
   }
 
   private tryDecodeParameters(eventSigHash: string, parameters: string[]): DecodedParameter[] | null {
-    // This would typically use a library like ethers.js or web3.js for ABI decoding
-    // For now, return basic parameter info
+    // Enhanced decoding for common events
+    if (eventSigHash === "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef") {
+      // Transfer(address,address,uint256) event
+      return parameters.map((param, index) => {
+        switch (index) {
+          case 0: // from address
+          case 1: // to address
+            return {
+              index,
+              type: "address",
+              value: param,
+              decodedValue: `0x${param.slice(-40)}`, // Extract address from padded hex
+            };
+          case 2: // amount
+            return {
+              index,
+              type: "uint256",
+              value: param,
+              decodedValue: parseInt(param, 16).toLocaleString(), // Convert to readable number
+            };
+          default:
+            return {
+              index,
+              type: "bytes32",
+              value: param,
+              decodedValue: null,
+            };
+        }
+      });
+    }
+
+    // Default decoding for other events
     return parameters.map((param, index) => ({
       index,
-      type: "bytes32", // Default - would need ABI for proper typing
+      type: "bytes32",
       value: param,
-      decodedValue: null, // Would decode based on type
+      decodedValue: null,
     }));
   }
 }
