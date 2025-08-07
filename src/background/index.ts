@@ -578,169 +578,6 @@ function convertEthereumRequestToTransactionArgs(request: EthereumRequest): Tran
   };
 }
 
-/**
- * Step 1: Build EIP-7702 Authorization for Type 4 Transaction
- * Creates the authorization tuple needed for delegating to MetaMask's contract
- */
-async function buildEIP7702Authorization(
-  chainId: string,
-  userAddress: string,
-  delegateAddress: string
-): Promise<{
-  authorizationList: SetCodeAuthorization[];
-  transactionNonce: string;
-}> {
-  try {
-    bgLog('Building EIP-7702 authorization for user:', userAddress);
-    
-    // 1. Get the user's current transaction nonce
-    const nonceResponse = await fetch(GETH_NODE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'eth_getTransactionCount',
-        params: [userAddress, 'pending'],
-        id: 1
-      })
-    });
-
-    const nonceData = await nonceResponse.json();
-    if (nonceData.error) {
-      throw new Error(`Failed to get nonce: ${nonceData.error.message}`);
-    }
-
-    const transactionNonce = nonceData.result;
-    const txNonceNum = parseInt(transactionNonce, 16);
-    
-    // 2. Calculate auth nonce (txNonce + 1 since EOA broadcasts itself)
-    const authNonce = txNonceNum + 1;
-    
-    bgLog('Transaction nonce:', transactionNonce, 'Auth nonce:', authNonce);
-
-    // 3. Compute EIP-7702 native hash: keccak256(0x05 || RLP([chain_id, contract_address, nonce]))
-    const chainIdNum = parseInt(chainId, 16);
-    
-    // RLP encode [chain_id, contract_address, nonce]
-    const rlpEncoded = ethers.encodeRlp([
-      chainId,                         // Use original chainId string directly  
-      delegateAddress,                 // Address is already proper format
-      ethers.toBeHex(authNonce)       // Use ethers.toBeHex for nonce
-    ]);
-    
-    // Create the message with 0x05 prefix
-    const messageBytes = '0x05' + rlpEncoded.slice(2);
-    
-    bgLog('RLP encoded data:', rlpEncoded);
-    bgLog('Message bytes with 0x05 prefix:', messageBytes);
-
-    bgLog('🔄 BLOCKING: Requesting signature from user for message:', messageBytes);
-    bgLog('🔄 BLOCKING: Simulation STOPPED until signature received');
-
-    let signature: string;
-    try {
-      // Create a bulletproof Promise that MUST complete
-      signature = await new Promise<string>((resolve, reject) => {
-        bgLog('🔄 Creating signature promise...');
-        
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (!tabs[0]?.id) {
-            bgError('❌ No active tab found');
-            reject(new Error('No active tab found'));
-            return;
-          }
-
-          bgLog('🔄 Sending signature request to tab:', tabs[0].id);
-
-          chrome.tabs.sendMessage(tabs[0].id, {
-            type: 'REQUEST_PERSONAL_SIGN',
-            message: messageBytes,
-            address: userAddress
-          }, (response) => {
-            bgLog('🔄 Raw signature response received:', response);
-            
-            if (chrome.runtime.lastError) {
-              bgError('❌ Chrome runtime error:', chrome.runtime.lastError);
-              reject(new Error(`Message failed: ${chrome.runtime.lastError.message}`));
-              return;
-            }
-
-            if (!response) {
-              bgError('❌ No response received');
-              reject(new Error('No response received from content script'));
-              return;
-            }
-
-            if (response.error) {
-              bgError('❌ Signature error:', response.error);
-              reject(new Error(`Signature failed: ${response.error}`));
-              return;
-            }
-
-            if (!response.signature) {
-              bgError('❌ No signature in response');
-              reject(new Error('No signature received from user'));
-              return;
-            }
-
-            bgLog('✅ SIGNATURE RECEIVED:', response.signature);
-            resolve(response.signature);
-          });
-        });
-      });
-      
-      bgLog('✅ BLOCKING COMPLETE: Signature obtained, continuing simulation...');
-      
-    } catch (error) {
-      bgError('❌ SIGNATURE FAILED - STOPPING SIMULATION:', error);
-      throw new Error(`Signature request failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-
-    // Verify signature exists before proceeding
-    if (!signature || signature.length < 132) {
-      bgError('❌ Invalid signature length:', signature?.length);
-      throw new Error('Invalid signature received');
-    }
-
-    // 5. Parse signature to get r, s, v and convert to yParity
-    const r = signature.slice(0, 66); // 0x + 64 chars
-    const s = '0x' + signature.slice(66, 130); // next 64 chars  
-    const v = parseInt(signature.slice(130, 132), 16); // last 2 chars
-    const yParity = v % 2;
-
-    bgLog('Parsed signature - r:', r, 's:', s, 'v:', v, 'yParity:', yParity);
-
-    // 6. Build authorization tuple [chainId, address, nonce, yParity, r, s]
-    const authorizationTuple: SetCodeAuthorization = {
-      chainId: `0x${chainIdNum.toString(16)}`,
-      address: delegateAddress,
-      nonce: `0x${authNonce.toString(16)}`,
-      yParity: `0x${yParity.toString(16)}`,
-      r: r,
-      s: s
-    };
-
-    const authorizationList = [authorizationTuple];
-
-    bgLog('Authorization tuple created:', authorizationTuple);
-    bgLog('✅ Authorization tuple built:', authorizationTuple);
-    bgLog('- chainId:', authorizationTuple.chainId);
-    bgLog('- address:', authorizationTuple.address);  
-    bgLog('- nonce:', authorizationTuple.nonce);
-    bgLog('- yParity:', authorizationTuple.yParity);
-    bgLog('- r:', authorizationTuple.r);
-    bgLog('- s:', authorizationTuple.s);
-
-    return {
-      authorizationList,
-      transactionNonce
-    };
-
-  } catch (error) {
-    bgError('Failed to build EIP-7702 authorization:', error);
-    throw error;
-  }
-}
 
 /**
  * Step 2: Encode UserOperations for MetaMask Delegate Contract
@@ -1020,21 +857,30 @@ async function buildTransactionWithSignature(
     bgError('⚠️  This might indicate network congestion or pending transactions');
   }
   
-  // Parse signature
-  const r = signatureData.signature.slice(0, 66);
-  const s = '0x' + signatureData.signature.slice(66, 130);
+  // Parse signature and strip leading zeros
+  const rRaw = signatureData.signature.slice(0, 66);
+  const sRaw = '0x' + signatureData.signature.slice(66, 130);
   const v = parseInt(signatureData.signature.slice(130, 132), 16);
   const yParity = v % 2;
-  
+
+  // Strip leading zeros from signature components
+  const r = stripLeadingZeros(rRaw);
+  const s = stripLeadingZeros(sRaw);
+
+  bgLog('🔧 Signature components (leading zeros stripped):');
+  bgLog('🔧 - r (raw):', rRaw, '-> (clean):', r);
+  bgLog('🔧 - s (raw):', sRaw, '-> (clean):', s);
+  bgLog('🔧 - yParity:', yParity);
+
   // Build authorization with original auth nonce (this stays the same)
   const chainIdNum = parseInt(batch.chainId, 16);
   const authorizationTuple: SetCodeAuthorization = {
     chainId: `0x${chainIdNum.toString(16)}`,
     address: METAMASK_DELEGATE_CONTRACT,
-    nonce: `0x${signatureData.authNonce.toString(16)}`, // Keep original auth nonce
+    nonce: `0x${signatureData.authNonce.toString(16)}`,
     yParity: `0x${yParity.toString(16)}`,
-    r: r,
-    s: s
+    r: r,  // ✅ Leading zeros stripped
+    s: s   // ✅ Leading zeros stripped
   };
   
   bgLog('✅ Authorization tuple built with auth nonce:', signatureData.authNonce);
@@ -1141,6 +987,18 @@ async function validateEIP7702Signature(
     bgError('❌ Signature validation failed:', error);
     return false;
   }
+}
+
+// Add this helper function:
+function stripLeadingZeros(hexString: string): string {
+  if (!hexString.startsWith('0x')) {
+    return hexString;
+  }
+  
+  // Remove 0x prefix, strip leading zeros, then add back 0x
+  let hex = hexString.slice(2);
+  hex = hex.replace(/^0+/, '') || '0'; // Keep at least one zero if all zeros
+  return '0x' + hex;
 }
 
 // Background script entry point
