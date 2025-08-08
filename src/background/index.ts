@@ -42,6 +42,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleSyncMessage(message, sender, sendResponse, handleOpenPopup);
     return false; // Sync message
   }
+
+  if (message.type === 'GET_QUARANTINE_REASON') {
+    (async () => {
+      try {
+        const result = await getQuarantineReason(message.txHash);
+        sendResponse(result);
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    })();
+    return true;
+  }
   
   // Unknown message type
   bgError('Unknown message type:', message.type);
@@ -999,6 +1011,44 @@ function stripLeadingZeros(hexString: string): string {
   let hex = hexString.slice(2);
   hex = hex.replace(/^0+/, '') || '0'; // Keep at least one zero if all zeros
   return '0x' + hex;
+}
+
+// Add this helper:
+async function getQuarantineReason(txHash: string): Promise<{ success: boolean; found?: boolean; reason?: string; error?: string }> {
+  try {
+    const payload = {
+      jsonrpc: '2.0',
+      method: 'firewall_getQuarantineReason',
+      params: [txHash],
+      id: Date.now(),
+    };
+
+    const resp = await fetch(GETH_NODE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!resp.ok) {
+      return { success: false, error: `HTTP ${resp.status}` };
+    }
+
+    const data = await resp.json();
+    if (data?.error) {
+      return { success: false, error: data.error?.message || 'RPC error' };
+    }
+
+    const result = data?.result as { Found?: boolean; Reason?: string } | undefined;
+    if (!result) return { success: true, found: false };
+
+    return {
+      success: true,
+      found: !!result.Found,
+      reason: result.Reason || '',
+    };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : 'Unknown error' };
+  }
 }
 
 // Background script entry point

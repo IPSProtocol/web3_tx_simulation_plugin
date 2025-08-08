@@ -1,4 +1,5 @@
 import { SimBlockResult, SimCallResult, ContractEvents, CallError } from '../types/simulation_interfaces';
+import { ethers } from 'ethers';
 
 // Event signatures to filter out (gas-related and validator events)
 const FILTERED_EVENT_SIGNATURES = new Set([
@@ -23,13 +24,68 @@ const CONSOLIDATION_TOKENS = new Set([
 const TRANSFER_EVENT_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 
 export class EventAnalyzer {
-  
-  constructor() {
+  private rpcUrl: string;
+  private decimalsCache = new Map<string, number>();
+
+  constructor(rpcUrl: string) {
+    this.rpcUrl = rpcUrl;
     console.log('EventAnalyzer initialized with filtered signatures:', Array.from(FILTERED_EVENT_SIGNATURES));
     console.log('EventAnalyzer initialized with filtered addresses:', Array.from(FILTERED_ADDRESSES));
     console.log('EventAnalyzer initialized with consolidation tokens:', Array.from(CONSOLIDATION_TOKENS));
   }
-  
+
+  // ✅ Fetch and cache ERC-20 decimals
+  private async getTokenDecimals(address: string): Promise<number> {
+    const key = address.toLowerCase();
+    if (this.decimalsCache.has(key)) return this.decimalsCache.get(key)!;
+
+    try {
+      const payload = {
+        jsonrpc: '2.0',
+        method: 'eth_call',
+        params: [
+          { to: address, data: '0x313ce567' }, // decimals()
+          'latest'
+        ],
+        id: Date.now()
+      };
+      const resp = await fetch(this.rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json();
+      const hex: string | undefined = data?.result;
+      const dec = hex ? parseInt(hex, 16) : 18;
+      const decimals = Number.isFinite(dec) ? dec : 18;
+      this.decimalsCache.set(key, decimals);
+      return decimals;
+    } catch {
+      this.decimalsCache.set(key, 18);
+      return 18;
+    }
+  }
+
+  // ✅ Format Transfer/Approval amounts by token decimals
+  private async applyTokenDecimalsToEvent(e: ParsedEvent): Promise<void> {
+    const isTransfer = e.eventSignature === TRANSFER_EVENT_SIG;
+    const isApproval = e.eventSignature === '0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925';
+    if (!isTransfer && !isApproval) return;
+    if (!e.parametersDecoded || e.parametersDecoded.length < 3) return;
+
+    const amountParam = e.parametersDecoded[2];
+    const rawHex = amountParam?.value; // expect 0x...
+    if (!rawHex || typeof rawHex !== 'string') return;
+
+    const decimals = await this.getTokenDecimals(e.contractAddress);
+    try {
+      const formatted = ethers.formatUnits(ethers.getBigInt(rawHex), decimals);
+      amountParam.decodedValue = formatted; // ✅ replace with human-readable amount
+    } catch {
+      // keep previous decodedValue on failure
+    }
+  }
+
   /**
    * Check if an event signature should be filtered out
    */
@@ -58,7 +114,7 @@ export class EventAnalyzer {
   /**
    * Parses and analyzes FullTransactionEvents from simulation results
    */
-  parseTransactionEvents(results: any[]): ParsedSimulationResult[] {
+  async parseTransactionEvents(results: any[]): Promise<ParsedSimulationResult[]> {
     const parsedResults: ParsedSimulationResult[] = [];
 
     for (const blockResult of results) {
@@ -81,7 +137,7 @@ export class EventAnalyzer {
         const receipt = receipts[i];
         
         // Combine call data with receipt data for more complete transaction info
-        const transactionEvents = this.parseTransactionCall(call, receipt, i);
+        const transactionEvents = await this.parseTransactionCall(call, receipt, i);
         blockEvents.transactions.push(transactionEvents);
       }
 
@@ -151,7 +207,7 @@ export class EventAnalyzer {
     return false;
   }
 
-  private parseTransactionCall(call: any, receipt: any, txIndex: number): ParsedTransactionResult {
+  private async parseTransactionCall(call: any, receipt: any, txIndex: number): Promise<ParsedTransactionResult> {
     console.log('Parsing call:', call);
     console.log('Parsing receipt:', receipt);
     
@@ -271,6 +327,11 @@ export class EventAnalyzer {
         }
         result.eventsByContract.get(event.contractAddress)!.push(event);
       }
+    }
+
+    // ✅ Apply decimals-aware formatting to all Transfer/Approval events
+    for (const evt of result.events) {
+      await this.applyTokenDecimalsToEvent(evt);
     }
 
     console.log('=== FINAL PARSING RESULT ===');

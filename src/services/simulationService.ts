@@ -16,7 +16,7 @@ export class SimulationService {
 
     constructor(rpcUrl: string) {
         this.apiClient = new SimulationApiClient(rpcUrl);
-        this.eventAnalyzer = new EventAnalyzer();
+        this.eventAnalyzer = new EventAnalyzer(rpcUrl); // ✅ pass rpc
     }
 
     async simulateTransaction(transaction: TransactionArgs): Promise<BatchSimulationResult> {
@@ -37,7 +37,7 @@ export class SimulationService {
             }
 
             if (response.results) {
-                const parsedResults = this.eventAnalyzer.parseTransactionEvents(response.results);
+                const parsedResults = await this.eventAnalyzer.parseTransactionEvents(response.results); // ✅ await
                 const gasEstimate = this.calculateGasEstimate(parsedResults);
 
                 return {
@@ -90,7 +90,7 @@ export class SimulationService {
                 };
             }
 
-            const parsedResults = this.eventAnalyzer.parseTransactionEvents(response.results);
+            const parsedResults = await this.eventAnalyzer.parseTransactionEvents(response.results); // ✅ await
             const gasEstimate = this.calculateGasEstimate(parsedResults);
 
             return {

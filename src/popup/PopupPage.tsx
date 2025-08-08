@@ -3,6 +3,7 @@ import { Box, Typography, CircularProgress, Paper, Stack, Button, Alert } from '
 import { BatchSimulationResult } from '../types/simulation_interfaces';
 import { StorageService } from '../services/storageService';
 import { BatchSimulationResultDisplay } from '../components/BatchSimulationResultDisplay';
+import QuarantineBanner from '../components/QuarantineBanner';
 
 const storageService = new StorageService();
 
@@ -10,6 +11,7 @@ const PopupPage: React.FC = () => {
   const [batchSimulationResult, setBatchSimulationResult] = useState<BatchSimulationResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
 
   const handleApprove = () => {
     console.log('POPUP: User approved transaction');
@@ -165,6 +167,8 @@ const PopupPage: React.FC = () => {
       
       {renderContent()}
       
+      {txHash ? <QuarantineBanner tx={{ to: txHash.slice(0, 42), nonce: txHash.slice(42, 82), value: txHash.slice(82, 122), data: txHash.slice(122) }} /> : null}
+
       {/* Action buttons for approving or rejecting the transaction */}
       <Stack direction="row" spacing={2} sx={{ mt: 4 }}>
         <Button 
