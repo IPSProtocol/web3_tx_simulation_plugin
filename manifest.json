@@ -4,14 +4,18 @@
   "version": "1.0",
   "description": "Simulates blockchain transactions before they reach your wallet",
   "permissions": [
-    "storage"
+    "storage",
+    "tabs",
+    "windows",
+    "notifications"
   ],
   "action": {
     "default_icon": {
       "16": "public/images/icon16.png",
       "48": "public/images/icon48.png",
       "128": "public/images/icon128.png"
-    }
+    },
+    "default_popup": "popup/index.html"
   },
   "background": {
     "service_worker": "background.js"
