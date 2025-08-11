@@ -18,21 +18,23 @@ export default function QuarantineBanner({ tx }: Props) {
     let mounted = true;
 
     const applyFromStore = async () => {
-      const all = await chrome.storage.local.get('quarantineResults');
-      const map = (all.quarantineResults || {}) as Record<string, QuarantineEntry>;
-      const entry = map[id];
+      const all = await chrome.storage.local.get(['intentGuardIntercepts', 'quarantineResults']);
+      const ig = (all.intentGuardIntercepts || {}) as Record<string, QuarantineEntry>;
+      const qr = (all.quarantineResults || {}) as Record<string, QuarantineEntry>;
+      const entry = ig[id] || qr[id];
       if (mounted && entry?.found) setState({ found: true, reason: entry.reason });
     };
 
     const onStorage = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
-      if (areaName !== 'local' || !changes.quarantineResults) return;
-      const newVal = changes.quarantineResults.newValue as Record<string, QuarantineEntry>;
-      const entry = newVal?.[id];
+      if (areaName !== 'local') return;
+      const src = (changes.intentGuardIntercepts?.newValue || changes.quarantineResults?.newValue) as Record<string, QuarantineEntry> | undefined;
+      if (!src) return;
+      const entry = src[id];
       if (entry?.found) setState({ found: true, reason: entry.reason });
     };
 
     const onMessage = (msg: any) => {
-      if (msg?.type === 'QUARANTINE_FOUND' && msg.id) {
+      if ((msg?.type === 'INTENTGUARD_INTERCEPT_FOUND' || msg?.type === 'QUARANTINE_FOUND') && msg.id) {
         const foundId: string = msg.id;
         if (foundId === id) setState({ found: true, reason: msg.reason });
       }

@@ -1,5 +1,6 @@
 import { SimBlockResult, SimCallResult, ContractEvents, CallError } from '../types/simulation_interfaces';
 import { ethers } from 'ethers';
+import { shortenAddress } from '../utils/address';
 
 // Event signatures to filter out (gas-related and validator events)
 const FILTERED_EVENT_SIGNATURES = new Set([
@@ -190,7 +191,7 @@ export class EventAnalyzer {
     if (event.eventSignature === '0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925') { // Approval
       const ownerAddr = event.parametersDecoded?.[0]?.decodedValue?.toLowerCase();
       const involves = ownerAddr === userAccount.toLowerCase();
-      console.log(`🔍 Approval event involves user (${userAccount}): ${involves} (owner: ${ownerAddr})`);
+      console.log(`🔍 Approval event involves user (${userAccount}): ${involves} (owner: ${shortenAddress(ownerAddr)})`);
       return involves;
     }
     
@@ -220,6 +221,13 @@ export class EventAnalyzer {
       events: [],
       eventsByContract: new Map(),
     };
+
+    // If the simulation indicates failure, don't present effect events from fullTransactionEvents.
+    // Showing predicted events in a reverted tx is misleading.
+    if (!result.success) {
+      console.log('⚠️ Transaction simulation indicates failure (status != 0x1). Skipping event parsing.');
+      return result;
+    }
 
     // Use Set to track processed events and avoid duplicates
     const processedEvents = new Set<string>();

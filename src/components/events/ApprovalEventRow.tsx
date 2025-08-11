@@ -86,12 +86,12 @@ export const ApprovalEventRow: React.FC<ApprovalEventRowProps> = ({
         alignItems="center" 
         spacing={4}
         sx={{ 
-          minHeight: 72,
+          minHeight: 40,
           px: 3,
           py: 2
         }}
       >
-        <Stack direction="row" alignItems="center" spacing={2} sx={{ width: 200, ml: 2 }}>
+        <Stack direction="row" alignItems="center" spacing={2} sx={{ width: 120, ml: 2 }}>
           <IconButton size="small" onClick={() => setOpen(!open)}>
             {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
           </IconButton>

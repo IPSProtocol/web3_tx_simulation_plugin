@@ -27,6 +27,11 @@ script.onload = () => {
 // 2. Listen for messages from the page script
 // LOGIC ENTRYPOINT
 window.addEventListener('message', (event) => {
+  // Capture TX_APPROVED from pageScript and forward to background
+  if (event.data.type === 'TX_APPROVED') {
+    chrome.runtime.sendMessage({ type: 'TX_APPROVED', subtype: event.data.subtype, tx: event.data.tx });
+    return;
+  }
   // Only log our own messages to avoid spam
   if (event.data.type && (event.data.type.includes('WEB3_') || event.data.type.includes('SIMULATION'))) {
     console.log(' SIMULATION PLUGIN: ContentScript received message:', event.data);
@@ -117,6 +122,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     
     return true; // Critical: keeps channel open
   }
+
+  if (msg.type === 'REQUEST_RAW_SIGN') {
+    (async () => {
+      try {
+        const signature = await obtainRawSignatureFromPageScript(msg);
+        sendResponse({ signature });
+      } catch (err) {
+        sendResponse({ error: err instanceof Error ? err.message : 'Unknown error' });
+      }
+    })();
+    return true;
+  }
   
   if (msg.type === 'USER_APPROVED') {
     handleUserApproval(msg);
@@ -199,3 +216,27 @@ async function obtainSignatureFromPageScript(request: any): Promise<string> {
     }, 120000);
   });
 } 
+
+async function obtainRawSignatureFromPageScript(request: any): Promise<string> {
+  return new Promise((resolve, reject) => {
+    window.postMessage({
+      type: 'REQUEST_RAW_SIGN',
+      message: request.message,
+      address: request.address
+    }, window.location.origin);
+
+    const handle = (event: MessageEvent) => {
+      if (event.data.type === 'RAW_SIGN_RESPONSE') {
+        window.removeEventListener('message', handle);
+        if (event.data.error) return reject(new Error(event.data.error));
+        if (event.data.signature) return resolve(event.data.signature);
+        return reject(new Error('No signature received'));
+      }
+    };
+    window.addEventListener('message', handle);
+    setTimeout(() => {
+      window.removeEventListener('message', handle);
+      reject(new Error('Raw sign request timed out'));
+    }, 120000);
+  });
+}

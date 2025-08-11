@@ -58,8 +58,8 @@ const formatAmount = (amount: string): string => {
 const SwapEventRow: React.FC<SwapEventRowProps> = ({ event, tokenName }) => {
   const [open, setOpen] = React.useState(false);
 
-  const sender = event.parameters.find(p => p.name === 'sender')?.value;
-  const recipient = event.parameters.find(p => p.name === 'recipient')?.value;
+  const sender = shortenAddress(event.parameters.find(p => p.name === 'sender')?.value);
+  const recipient = shortenAddress(event.parameters.find(p => p.name === 'recipient')?.value);
   const amount0In = event.parameters.find(p => p.name === 'amount0In')?.value;
   const amount1In = event.parameters.find(p => p.name === 'amount1In')?.value;
   const amount0Out = event.parameters.find(p => p.name === 'amount0Out')?.value;
@@ -87,12 +87,12 @@ const SwapEventRow: React.FC<SwapEventRowProps> = ({ event, tokenName }) => {
         alignItems="center" 
         spacing={4}
         sx={{ 
-          minHeight: 72,
+          minHeight: 40,
           px: 3,
           py: 2
         }}
       >
-        <Stack direction="row" alignItems="center" spacing={2} sx={{ width: 200, ml: 2 }}>
+        <Stack direction="row" alignItems="center" spacing={2} sx={{ width: 120, ml: 2 }}>
           <IconButton size="small" onClick={() => setOpen(!open)}>
             {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
           </IconButton>

@@ -27,8 +27,21 @@ export class SimulationService {
         try {
             const response = await this.apiClient.simulateV1IPSP(params);
             console.log('SimulateV1IPSP response:', response);
-            // Fix: Check if error exists and is not empty
+            // Even if the simulation reports an error (e.g., invalid signature),
+            // try to parse events if results are present so we can display them.
             if (!response.success || (response.error && response.error.trim().length > 0)) {
+                console.warn('Simulation reported error, attempting to parse any returned results for events...');
+                if (response.results && response.results.length > 0) {
+                    const parsedResults = await this.eventAnalyzer.parseTransactionEvents(response.results);
+                    const gasEstimate = this.calculateGasEstimate(parsedResults);
+                    console.log('Parsed events despite simulation error:', parsedResults);
+                    return {
+                        success: false,
+                        error: response.error || 'Unknown error',
+                        results: parsedResults,
+                        gasEstimate
+                    };
+                }
                 return {
                     success: false,
                     error: response.error || 'Unknown error',

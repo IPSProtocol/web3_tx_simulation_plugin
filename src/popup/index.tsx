@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { theme } from '../theme';
-import PopupPage from './PopupPage';
+import App from './App';
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Failed to find the root element');
@@ -13,7 +13,7 @@ root.render(
   <React.StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <PopupPage />
+      <App />
     </ThemeProvider>
   </React.StrictMode>
 );

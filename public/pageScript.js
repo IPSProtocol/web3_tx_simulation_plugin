@@ -48,6 +48,8 @@ setTimeout(() => {
           } else if (event.data.type === 'USER_APPROVED') {
             window.removeEventListener('message', handleMessage);
             // User approved, proceed with transaction
+            // Inform extension background of approval for intercept tracking
+            window.postMessage({ type: 'TX_APPROVED', subtype: 'single', tx: payload.params[0] }, '*');
             resolve(originalRequest.call(this, payload));
           }
         };
@@ -83,6 +85,8 @@ setTimeout(() => {
           } else if (event.data.type === 'USER_APPROVED') {
             window.removeEventListener('message', handleMessage);
             // User approved, proceed with transaction
+            // Inform extension background of approval for intercept tracking
+            window.postMessage({ type: 'TX_APPROVED', subtype: 'batch' }, '*');
             resolve(originalRequest.call(this, payload));
           }
         };
@@ -118,6 +122,30 @@ setTimeout(() => {
         console.error('SIMULATION PLUGIN: personal_sign failed:', error);
         window.postMessage({
           type: 'PERSONAL_SIGN_RESPONSE', 
+          error: error.message || 'Unknown error'
+        }, window.location.origin);
+      }
+    }
+  });
+
+  // Listen for raw eth_sign requests from content script (no personal prefix)
+  window.addEventListener('message', async (event) => {
+    if (event.data.type === 'REQUEST_RAW_SIGN') {
+      try {
+        console.log('SIMULATION PLUGIN: PageScript handling eth_sign (raw):', event.data);
+        // eth_sign expects params: [address, data]
+        const signature = await currentProvider.request({
+          method: 'eth_sign',
+          params: [event.data.address, event.data.message]
+        });
+        window.postMessage({
+          type: 'RAW_SIGN_RESPONSE',
+          signature
+        }, window.location.origin);
+      } catch (error) {
+        console.error('SIMULATION PLUGIN: eth_sign failed:', error);
+        window.postMessage({
+          type: 'RAW_SIGN_RESPONSE',
           error: error.message || 'Unknown error'
         }, window.location.origin);
       }
